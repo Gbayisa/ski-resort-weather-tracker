@@ -1,0 +1,20 @@
+{
+  "name": "ski-resort-weather-tracker-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Ski Resort Weather Tracker",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "seed": "node src/scripts/seedResorts.js",
+    "jobs": "node src/jobs/runner.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "node-cron": "^3.0.3"
+  }
+}

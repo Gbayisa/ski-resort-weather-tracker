@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.log
+.cache/
+data/cache/
+data/resorts.json
+!data/.gitkeep
+*.db
+*.db-shm
+*.db-wal
