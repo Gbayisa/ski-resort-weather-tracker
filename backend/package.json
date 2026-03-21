@@ -8,7 +8,9 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "seed": "node src/scripts/seedResorts.js",
-    "jobs": "node src/jobs/runner.js"
+    "jobs": "node src/jobs/runner.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
@@ -16,5 +18,8 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0"
   }
 }
