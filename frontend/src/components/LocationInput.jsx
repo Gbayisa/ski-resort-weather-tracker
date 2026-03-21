@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGeocoding } from '../hooks/useGeocoding.js';
+import { getGeolocationErrorMessage } from '../utils/geoError.js';
 
 export default function LocationInput({ location, setLocation }) {
   const { query, setQuery, results, isSearching, handleQueryChange, clearResults } = useGeocoding();
@@ -20,7 +21,7 @@ export default function LocationInput({ location, setLocation }) {
 
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser');
+      alert('Geolocation is not supported by your browser. Please type a location instead.');
       return;
     }
     setGeoLoading(true);
@@ -35,10 +36,10 @@ export default function LocationInput({ location, setLocation }) {
         clearResults();
       },
       (err) => {
-        alert('Unable to get your location. Please type a location instead.');
+        alert(getGeolocationErrorMessage(err.code));
         setGeoLoading(false);
       },
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
   };
 

@@ -1,42 +1,17 @@
-# Render Blueprint – deploys backend API + frontend static site together.
+# Render Blueprint – deploys as a single unified web service.
+# The Express backend serves both the /api routes and the pre-built React frontend.
+# No VITE_API_BASE_URL is required; the frontend uses the relative /api prefix by default.
 # Docs: https://render.com/docs/blueprint-spec
-#
-# IMPORTANT after first deploy:
-#   1. Copy the URL of the "ski-resort-api" service (e.g. https://ski-resort-api.onrender.com)
-#   2. Open the "ski-resort-frontend" service → Environment → VITE_API_BASE_URL
-#   3. Set it to  https://<your-ski-resort-api>.onrender.com/api  (include /api at the end)
-#   4. Trigger a manual re-deploy of the frontend so the new env var is baked in.
 
 services:
-  # ── Backend API ────────────────────────────────────────────────────────────
   - type: web
-    name: ski-resort-api
+    name: ski-resort-weather-tracker
     runtime: node
-    rootDir: backend
-    buildCommand: npm install
-    startCommand: npm start
+    # Build the frontend first, then install backend dependencies
+    buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install
+    startCommand: node backend/src/index.js
     plan: free
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
-
-  # ── Frontend static site ───────────────────────────────────────────────────
-  - type: web
-    name: ski-resort-frontend
-    runtime: static
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    plan: free
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    envVars:
-      # Set this to your backend API URL: https://<ski-resort-api>.onrender.com/api
-      # Must be set BEFORE building the frontend (it is compiled into the static bundle).
-      # sync: false means this variable must be set manually in the Render dashboard —
-      # it cannot be auto-derived because Render env vars do not support string concatenation.
-      - key: VITE_API_BASE_URL
-        sync: false
