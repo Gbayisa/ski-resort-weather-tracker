@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+// vi.stubEnv is used by some tests to simulate a deployed VITE_API_BASE_URL
 
 // Snapshot the original fetch so we can restore it
 const originalFetch = globalThis.fetch;
@@ -121,5 +122,22 @@ describe('api.js – getHealth', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/health');
     expect(data.status).toBe('ok');
+  });
+});
+
+describe('api.js – VITE_API_BASE_URL override', () => {
+  it('uses the configured base URL when VITE_API_BASE_URL is set', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://example.onrender.com/api');
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ results: [] }),
+    });
+
+    const { searchLocation } = await import('../api.js');
+    await searchLocation('Verbier');
+
+    const calledUrl = globalThis.fetch.mock.calls[0][0];
+    expect(calledUrl).toContain('https://example.onrender.com/api/geocoding/search');
+    vi.unstubAllEnvs();
   });
 });
