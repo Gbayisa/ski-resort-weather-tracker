@@ -286,11 +286,161 @@ const SEED_RESORTS = [
   { name: 'Chapelco', lat: -40.3249, lon: -71.3756, country: 'AR', region: 'Neuquén', website: 'https://www.chapelco.com.ar', osm_id: 'osm_chapelco' },
   { name: 'Cerro Castor', lat: -54.7823, lon: -68.1548, country: 'AR', region: 'Tierra del Fuego', website: 'https://www.cerrocastor.com', osm_id: 'osm_cerrocastor' },
   { name: 'Caviahue', lat: -37.8744, lon: -71.0301, country: 'AR', region: 'Neuquén', website: 'https://www.caviahue-copahue.com.ar', osm_id: 'osm_caviahue' },
+
+  // --- Bulgaria ---
+  { name: 'Borovets', lat: 42.2697, lon: 23.5960, country: 'BG', region: 'Sofia Province', website: 'https://www.borovets-bg.com', osm_id: 'osm_borovets' },
+  { name: 'Bansko', lat: 41.8398, lon: 23.4887, country: 'BG', region: 'Blagoevgrad', website: 'https://www.banskoski.com', osm_id: 'osm_bansko' },
+  { name: 'Pamporovo', lat: 41.6389, lon: 24.6927, country: 'BG', region: 'Smolyan', website: 'https://www.pamporovo.bg', osm_id: 'osm_pamporovo' },
+
+  // --- Romania ---
+  { name: 'Poiana Brasov', lat: 45.5986, lon: 25.5520, country: 'RO', region: 'Brașov', website: 'https://www.poiana-brasov.com', osm_id: 'osm_poianabrasov' },
+  { name: 'Sinaia', lat: 45.3532, lon: 25.5544, country: 'RO', region: 'Prahova', website: 'https://www.sinaia.ro', osm_id: 'osm_sinaia' },
+  { name: 'Predeal', lat: 45.5094, lon: 25.5779, country: 'RO', region: 'Brașov', website: 'https://www.predeal.ro', osm_id: 'osm_predeal' },
+
+  // --- Czech Republic ---
+  { name: 'Špindlerův Mlýn', lat: 50.7293, lon: 15.6107, country: 'CZ', region: 'Hradec Králové', website: 'https://www.skiareal.com', osm_id: 'osm_spindleruv' },
+  { name: 'Harrachov', lat: 50.7724, lon: 15.4099, country: 'CZ', region: 'Liberec', website: 'https://www.skiareal-harrachov.cz', osm_id: 'osm_harrachov' },
+  { name: 'Pec pod Sněžkou', lat: 50.6924, lon: 15.7337, country: 'CZ', region: 'Hradec Králové', website: 'https://www.pecpodsnezkou.cz', osm_id: 'osm_pecpodsnezkou' },
+
+  // --- Slovakia ---
+  { name: 'Jasná Nízke Tatry', lat: 48.9363, lon: 19.5942, country: 'SK', region: 'Banská Bystrica', website: 'https://www.jasna.sk', osm_id: 'osm_jasna' },
+  { name: 'Štrbské Pleso', lat: 49.1205, lon: 20.0592, country: 'SK', region: 'Prešov', website: 'https://www.vt.sk', osm_id: 'osm_strbskepleso' },
+  { name: 'Donovaly', lat: 48.8861, lon: 19.2121, country: 'SK', region: 'Banská Bystrica', website: 'https://www.parksnow.sk', osm_id: 'osm_donovaly' },
+
+  // --- Poland ---
+  { name: 'Zakopane Kasprowy Wierch', lat: 49.2321, lon: 19.9817, country: 'PL', region: 'Lesser Poland', website: 'https://www.pkl.pl', osm_id: 'osm_kasprowy' },
+  { name: 'Białka Tatrzańska', lat: 49.4012, lon: 20.1351, country: 'PL', region: 'Lesser Poland', website: 'https://www.bialka-tatrzanska.pl', osm_id: 'osm_bialka' },
+  { name: 'Szczyrk Mountain Resort', lat: 49.7152, lon: 19.0465, country: 'PL', region: 'Silesia', website: 'https://www.szczyrkmountainresort.com', osm_id: 'osm_szczyrk' },
+
+  // --- Slovenia ---
+  { name: 'Kranjska Gora', lat: 46.4836, lon: 13.7905, country: 'SI', region: 'Upper Carniola', website: 'https://www.kranjska-gora.eu', osm_id: 'osm_kranjskagora' },
+  { name: 'Krvavec', lat: 46.3063, lon: 14.5374, country: 'SI', region: 'Upper Carniola', website: 'https://www.rtc-krvavec.si', osm_id: 'osm_krvavec' },
+  { name: 'Vogel', lat: 46.2647, lon: 13.8451, country: 'SI', region: 'Littoral', website: 'https://www.vogel.si', osm_id: 'osm_vogel' },
+
+  // --- Serbia ---
+  { name: 'Kopaonik', lat: 43.2883, lon: 20.8143, country: 'RS', region: 'Raška', website: 'https://www.skijalistasrbije.rs', osm_id: 'osm_kopaonik' },
+  { name: 'Zlatibor', lat: 43.7287, lon: 19.7022, country: 'RS', region: 'Zlatibor', website: 'https://www.zlatibor.rs', osm_id: 'osm_zlatibor' },
+
+  // --- Bosnia and Herzegovina ---
+  { name: 'Jahorina', lat: 43.7281, lon: 18.5687, country: 'BA', region: 'Republika Srpska', website: 'https://www.oc-jahorina.com', osm_id: 'osm_jahorina' },
+  { name: 'Bjelašnica', lat: 43.7190, lon: 18.2512, country: 'BA', region: 'Federation of BiH', website: 'https://www.bjelasnica.ba', osm_id: 'osm_bjelasnica' },
+
+  // --- Greece ---
+  { name: 'Parnassos Ski Centre', lat: 38.5368, lon: 22.5761, country: 'GR', region: 'Central Greece', website: 'https://www.parnassos-ski.gr', osm_id: 'osm_parnassos' },
+  { name: 'Vasilitsa', lat: 40.0333, lon: 21.1333, country: 'GR', region: 'Western Macedonia', website: 'https://www.vasilitsa.com', osm_id: 'osm_vasilitsa' },
+
+  // --- Turkey ---
+  { name: 'Uludağ', lat: 40.1144, lon: 29.1264, country: 'TR', region: 'Bursa', website: 'https://www.uludag.com.tr', osm_id: 'osm_uludag' },
+  { name: 'Palandöken', lat: 39.8571, lon: 41.2268, country: 'TR', region: 'Erzurum', website: 'https://www.palandoken.com', osm_id: 'osm_palandoken' },
+  { name: 'Kartalkaya', lat: 40.8521, lon: 31.5483, country: 'TR', region: 'Bolu', website: 'https://www.kartalkaya.com', osm_id: 'osm_kartalkaya' },
+
+  // --- Lebanon ---
+  { name: 'Mzaar Kfardebian', lat: 34.0714, lon: 35.9852, country: 'LB', region: 'Mount Lebanon', website: 'https://www.mzaar.com', osm_id: 'osm_mzaar' },
+  { name: 'Faraya Mzaar', lat: 34.0697, lon: 35.9899, country: 'LB', region: 'Mount Lebanon', website: 'https://www.faraya.com', osm_id: 'osm_faraya' },
+
+  // --- Georgia (country) ---
+  { name: 'Gudauri', lat: 42.4779, lon: 44.4789, country: 'GE', region: 'Mtskheta-Mtianeti', website: 'https://www.gudauri.travel', osm_id: 'osm_gudauri' },
+  { name: 'Bakuriani', lat: 41.7496, lon: 43.5244, country: 'GE', region: 'Samtskhe-Javakheti', website: 'https://www.bakuriani.ge', osm_id: 'osm_bakuriani' },
+
+  // --- Kazakhstan ---
+  { name: 'Shymbulak', lat: 43.1502, lon: 77.0830, country: 'KZ', region: 'Almaty', website: 'https://www.shymbulak.com', osm_id: 'osm_shymbulak' },
+
+  // --- Iran ---
+  { name: 'Dizin', lat: 36.1004, lon: 51.3923, country: 'IR', region: 'Tehran', website: 'https://www.dizin.ir', osm_id: 'osm_dizin' },
+  { name: 'Shemshak', lat: 36.0716, lon: 51.5064, country: 'IR', region: 'Tehran', website: 'https://www.shemshak.ir', osm_id: 'osm_shemshak' },
+
+  // --- Morocco ---
+  { name: 'Oukaimeden', lat: 31.2044, lon: -7.8667, country: 'MA', region: 'Marrakesh-Safi', website: 'https://www.oukaimeden.com', osm_id: 'osm_oukaimeden' },
+
+  // --- South Africa ---
+  { name: 'Tiffindell Ski Resort', lat: -30.7097, lon: 28.2010, country: 'ZA', region: 'Eastern Cape', website: 'https://www.tiffindell.co.za', osm_id: 'osm_tiffindell' },
+
+  // --- Lesotho ---
+  { name: 'Afriski Mountain Resort', lat: -29.2175, lon: 28.8845, country: 'LS', region: 'Butha-Buthe', website: 'https://www.afriski.net', osm_id: 'osm_afriski' },
+
+  // --- India ---
+  { name: 'Gulmarg', lat: 34.0462, lon: 74.3808, country: 'IN', region: 'Jammu & Kashmir', website: 'https://www.gulmarg.net', osm_id: 'osm_gulmarg' },
+  { name: 'Auli', lat: 30.5243, lon: 79.5639, country: 'IN', region: 'Uttarakhand', website: 'https://www.gmvnl.in', osm_id: 'osm_auli' },
+
+  // --- China (additional) ---
+  { name: 'Thaiwoo Ski Resort', lat: 40.5880, lon: 115.5303, country: 'CN', region: 'Hebei', website: 'https://www.thaiwoo.com', osm_id: 'osm_thaiwoo' },
+  { name: 'Beidahu Ski Resort', lat: 43.5760, lon: 127.1690, country: 'CN', region: 'Jilin', website: 'https://www.beidahu.com', osm_id: 'osm_beidahu' },
+
+  // --- Japan (additional) ---
+  { name: 'Appi Kogen', lat: 39.9720, lon: 141.0006, country: 'JP', region: 'Iwate', website: 'https://www.appi.co.jp', osm_id: 'osm_appikogen' },
+  { name: 'Myoko Kogen', lat: 37.0217, lon: 138.1063, country: 'JP', region: 'Niigata', website: 'https://www.myoko.tv', osm_id: 'osm_myokokogen' },
+  { name: 'Hakkoda Ropeway', lat: 40.6501, lon: 140.8729, country: 'JP', region: 'Aomori', website: 'https://www.hakkoda-ropeway.jp', osm_id: 'osm_hakkoda' },
+
+  // --- South Korea (additional) ---
+  { name: 'Jiri Mountain Ski Resort', lat: 35.3379, lon: 127.7313, country: 'KR', region: 'South Jeolla', website: 'https://www.jirisan.go.kr', osm_id: 'osm_jirisan' },
+
+  // --- Russia (additional) ---
+  { name: 'Arkhyz', lat: 43.5698, lon: 41.2890, country: 'RU', region: 'Karachay-Cherkessia', website: 'https://www.arch-ski.ru', osm_id: 'osm_arkhyz' },
+  { name: 'Dombai', lat: 43.2700, lon: 41.7208, country: 'RU', region: 'Karachay-Cherkessia', website: 'https://www.dombai.info', osm_id: 'osm_dombai' },
+
+  // --- Norway (additional) ---
+  { name: 'Hafjell', lat: 61.2667, lon: 10.4833, country: 'NO', region: 'Innlandet', website: 'https://www.hafjell.no', osm_id: 'osm_hafjell' },
+  { name: 'Kvitfjell', lat: 61.4667, lon: 10.1167, country: 'NO', region: 'Innlandet', website: 'https://www.kvitfjell.no', osm_id: 'osm_kvitfjell' },
+
+  // --- Sweden (additional) ---
+  { name: 'Idre Fjäll', lat: 61.8714, lon: 13.1083, country: 'SE', region: 'Dalarna', website: 'https://www.idrefjall.se', osm_id: 'osm_idrefjall' },
+  { name: 'Romme Alpin', lat: 60.4406, lon: 15.6422, country: 'SE', region: 'Dalarna', website: 'https://www.rommealpin.se', osm_id: 'osm_rommealpin' },
+  { name: 'Björnrike', lat: 62.6167, lon: 14.0667, country: 'SE', region: 'Jämtland', website: 'https://www.bjornrike.com', osm_id: 'osm_bjornrike' },
+
+  // --- Finland (additional) ---
+  { name: 'Pyhä-Luosto', lat: 66.9903, lon: 27.0622, country: 'FI', region: 'Lapland', website: 'https://www.pyhaluosto.fi', osm_id: 'osm_pyhaluosto' },
+  { name: 'Saariselkä', lat: 68.4223, lon: 27.4225, country: 'FI', region: 'Lapland', website: 'https://www.saariselka.fi', osm_id: 'osm_saariselka' },
+
+  // --- Germany (additional) ---
+  { name: 'Berchtesgaden', lat: 47.6275, lon: 13.0008, country: 'DE', region: 'Bavaria', website: 'https://www.berchtesgadener-land.com', osm_id: 'osm_berchtesgaden' },
+  { name: 'Oberstaufen', lat: 47.5516, lon: 10.0197, country: 'DE', region: 'Bavaria', website: 'https://www.oberstaufen.de', osm_id: 'osm_oberstaufen' },
+  { name: 'Balderschwang', lat: 47.4957, lon: 10.1476, country: 'DE', region: 'Bavaria', website: 'https://www.balderschwang.de', osm_id: 'osm_balderschwang' },
+  { name: 'Feldberg Schwarzwald', lat: 47.8744, lon: 8.0056, country: 'DE', region: 'Baden-Württemberg', website: 'https://www.liftverbund-feldberg.de', osm_id: 'osm_feldberg' },
+
+  // --- France (additional) ---
+  { name: 'Serre Chevalier', lat: 44.9197, lon: 6.5493, country: 'FR', region: 'Provence-Alpes-Côte d\'Azur', website: 'https://www.serre-chevalier.com', osm_id: 'osm_serrechevalier' },
+  { name: 'Isola 2000', lat: 44.1896, lon: 7.1630, country: 'FR', region: 'Provence-Alpes-Côte d\'Azur', website: 'https://www.isola2000.com', osm_id: 'osm_isola2000' },
+  { name: 'Pra-Loup', lat: 44.3793, lon: 6.5973, country: 'FR', region: 'Provence-Alpes-Côte d\'Azur', website: 'https://www.praloup.com', osm_id: 'osm_praloup' },
+
+  // --- Switzerland (additional) ---
+  { name: 'Villars-sur-Ollon', lat: 46.3040, lon: 7.0530, country: 'CH', region: 'Vaud', website: 'https://www.villars.ch', osm_id: 'osm_villars' },
+  { name: 'Leysin', lat: 46.3413, lon: 7.0044, country: 'CH', region: 'Vaud', website: 'https://www.leysin.ch', osm_id: 'osm_leysin' },
+  { name: 'Champéry', lat: 46.1757, lon: 6.8688, country: 'CH', region: 'Valais', website: 'https://www.champery.ch', osm_id: 'osm_champery' },
+
+  // --- Austria (additional) ---
+  { name: 'Rauris', lat: 47.2256, lon: 12.9986, country: 'AT', region: 'Salzburg', website: 'https://www.rauris.net', osm_id: 'osm_rauris' },
+  { name: 'Hochgurgl', lat: 46.8761, lon: 11.0345, country: 'AT', region: 'Tyrol', website: 'https://www.hochgurgl.com', osm_id: 'osm_hochgurgl' },
+  { name: 'Wagrain', lat: 47.3345, lon: 13.3031, country: 'AT', region: 'Salzburg', website: 'https://www.snow-space.com', osm_id: 'osm_wagrain' },
+
+  // --- Italy (additional) ---
+  { name: 'Passo Tonale', lat: 46.2608, lon: 10.5804, country: 'IT', region: 'Trentino', website: 'https://www.passotonale.it', osm_id: 'osm_passotonale' },
+
+  // --- Spain (additional) ---
+  { name: 'Masella', lat: 42.3167, lon: 1.9167, country: 'ES', region: 'Catalonia', website: 'https://www.masella.com', osm_id: 'osm_masella' },
+
+  // --- United Kingdom (additional) ---
+  { name: 'The Lecht', lat: 57.3622, lon: -3.2636, country: 'GB', region: 'Scotland', website: 'https://www.lecht.co.uk', osm_id: 'osm_thelecht' },
+
+  // --- Canada (additional) ---
+  { name: 'Nakiska', lat: 50.9358, lon: -115.1479, country: 'CA', region: 'Alberta', website: 'https://www.skinakiska.com', osm_id: 'osm_nakiska' },
+  { name: 'Sunshine Village', lat: 51.0773, lon: -115.7717, country: 'CA', region: 'Alberta', website: 'https://www.skibanff.com', osm_id: 'osm_sunshinevillage' },
+
+  // --- USA: Mid-Atlantic & Southeast ---
+  { name: 'Wisp Resort', lat: 39.5337, lon: -79.3590, country: 'US', region: 'Maryland', website: 'https://www.wispresort.com', osm_id: 'osm_wisp' },
+  { name: 'Whitetail Resort', lat: 39.7461, lon: -77.7950, country: 'US', region: 'Pennsylvania', website: 'https://www.skiwhitetail.com', osm_id: 'osm_whitetail' },
+  { name: 'Seven Springs Mountain Resort', lat: 39.8884, lon: -79.3093, country: 'US', region: 'Pennsylvania', website: 'https://www.7springs.com', osm_id: 'osm_sevensprings' },
+  { name: 'Winterplace', lat: 37.8167, lon: -81.1500, country: 'US', region: 'West Virginia', website: 'https://www.winterplace.com', osm_id: 'osm_winterplace' },
+
+  // --- USA: Midwest ---
+  { name: 'Boyne Mountain', lat: 45.1680, lon: -84.9185, country: 'US', region: 'Michigan', website: 'https://www.boynemountain.com', osm_id: 'osm_boynemountain' },
+  { name: 'Crystal Mountain Michigan', lat: 44.5073, lon: -85.8229, country: 'US', region: 'Michigan', website: 'https://www.crystalmountain.com', osm_id: 'osm_crystalmtnmi' },
+
+  // --- USA: New York & Mid-Atlantic ---
 ];
 
 export { SEED_RESORTS };
 
-async function seed() {
+export async function seed() {
   initDb();
   const db = getDb();
 

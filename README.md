@@ -15,7 +15,7 @@ A local MVP website that helps users find ski resorts near them with the best sn
   - Sky condition (sunny / partly cloudy / cloudy)
 - **3-day snowfall history** for each resort
 - **Live weather data** from [Open-Meteo](https://open-meteo.com/)
-- **87 ski resorts** seeded from OpenStreetMap-derived data (worldwide)
+- **294 ski resorts** seeded from OpenStreetMap-derived data (worldwide, 39 countries)
 - **Background jobs** for cache warming and cleanup
 - **Placeholder ad slots** (AdSense-ready)
 - **Mobile responsive** design
@@ -57,7 +57,9 @@ cd backend
 npm run seed
 ```
 
-This creates a SQLite database with 87 ski resorts worldwide.
+This creates a SQLite database with 294 ski resorts worldwide (39 countries).
+
+> **Note:** The seed runs automatically on every backend startup (`npm start` / `npm run dev`), so you only need to run it explicitly if you want to reset data.
 
 ### 3. Start the Backend
 
@@ -137,10 +139,29 @@ ski-resort-weather-tracker/
 
 ## Environment Variables
 
-No environment variables are required for local development. The app uses:
+No environment variables are required for **local development**. The Vite dev proxy forwards `/api` requests to the backend automatically.
 
-- **Open-Meteo** — free, no API key needed
-- **SQLite** — local file database (auto-created on first seed)
+### Production (Render / static hosting)
+
+When the frontend is deployed as a **static site** (e.g. on Render), the Vite proxy is no longer available. You must tell the frontend where the backend lives by setting `VITE_API_BASE_URL` **at build time**:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VITE_API_BASE_URL` | Full URL of the backend API including `/api` | `https://ski-resort-api.onrender.com/api` |
+
+See `frontend/.env.example` for reference.
+
+### Deploying to Render
+
+A `render.yaml` Blueprint is included in the repo root to configure both services automatically.
+
+1. Connect the repository to [Render](https://render.com) and select **New → Blueprint**.
+2. Render will create two services: `ski-resort-api` (Node web service) and `ski-resort-frontend` (static site).
+3. After the **first** deploy, copy the URL of the `ski-resort-api` service (e.g. `https://ski-resort-api.onrender.com`).
+4. In the Render dashboard, open `ski-resort-frontend` → **Environment** → set `VITE_API_BASE_URL` to `https://<your-ski-resort-api>.onrender.com/api`.
+5. Trigger a **Manual Deploy** of the frontend so the new env var is compiled into the static bundle.
+
+> ⚠️ `VITE_API_BASE_URL` is a **build-time** variable — it is compiled into the JavaScript bundle by Vite. Changing it in the dashboard requires a rebuild/redeploy of the frontend to take effect.
 
 ## How It Works
 
@@ -168,8 +189,7 @@ No environment variables are required for local development. The app uses:
 
 ### Resort Discovery
 
-The MVP uses a seeded database of 87 resorts. In production, these would be refreshed
-from OpenStreetMap's Overpass API using winter sports tags (`sport=skiing`, `landuse=winter_sports`, etc.).
+The MVP uses a seeded database of 294 resorts across 39 countries. The resort data is automatically re-seeded on every backend startup (idempotent — uses `INSERT OR IGNORE`). In a future version, data could be refreshed from OpenStreetMap's Overpass API using winter sports tags (`sport=skiing`, `landuse=winter_sports`, etc.).
 
 ## Production Notes
 
