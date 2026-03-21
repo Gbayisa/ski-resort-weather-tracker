@@ -7,6 +7,7 @@ import geocodingRoutes from './routes/geocoding.js';
 import recommendRoutes from './routes/recommend.js';
 import resortRoutes from './routes/resort.js';
 import { startScheduledJobs } from './jobs/scheduler.js';
+import { seed } from './scripts/seedResorts.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,6 +30,7 @@ app.use('/api/resort', resortRoutes);
 
 async function start() {
   initDb();
+  await seed();
   startScheduledJobs();
   app.listen(PORT, () => {
     console.log(`Ski Resort Weather Tracker API running on http://localhost:${PORT}`);
