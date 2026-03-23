@@ -36,6 +36,16 @@ export function visibilityLabel(visKm) {
 }
 
 /**
+ * Standard environmental lapse rate: ~6.5°C per 1000m elevation gain.
+ * Adjusts a base temperature for a given elevation difference.
+ */
+export function adjustTemperatureForElevation(baseTemp, baseElevation, targetElevation) {
+  const LAPSE_RATE = 6.5; // °C per 1000m
+  const elevDiff = targetElevation - baseElevation;
+  return Math.round((baseTemp - (elevDiff / 1000) * LAPSE_RATE) * 10) / 10;
+}
+
+/**
  * Parse hourly forecast data into morning and afternoon blocks.
  * Morning: 06:00–11:59, Afternoon: 12:00–17:59
  */
@@ -94,6 +104,75 @@ export function parseForecastBlocks(hourlyData, forecastDate) {
 }
 
 /**
+ * Parse hourly forecast data into a full-day hourly timeline.
+ * Returns an array of hourly entries for the given date (0-23h).
+ * Each entry includes: hour, snowfall, precipitation, temperature,
+ * wind speed, visibility, cloud cover, sky condition, snow depth, freezing level.
+ */
+export function parseHourlyTimeline(hourlyData, forecastDate, elevations) {
+  if (!hourlyData || !hourlyData.time) return [];
+
+  const { base: baseElev = 0, mid: midElev = 0, peak: peakElev = 0 } = elevations || {};
+
+  const timeline = [];
+
+  for (let i = 0; i < hourlyData.time.length; i++) {
+    const time = hourlyData.time[i];
+    if (!time.startsWith(forecastDate)) continue;
+
+    const hour = parseInt(time.split('T')[1].split(':')[0], 10);
+    const snowfall = hourlyData.snowfall?.[i] ?? 0;
+    const precipitation = hourlyData.precipitation?.[i] ?? 0;
+    const temp2m = hourlyData.temperature_2m?.[i] ?? null;
+    const wind = hourlyData.wind_speed_10m?.[i] ?? 0;
+    const vis = hourlyData.visibility?.[i] ?? 10000;
+    const cloud = hourlyData.cloud_cover?.[i] ?? 0;
+    const snowDepth = hourlyData.snow_depth?.[i] ?? 0;
+    const freezingLevel = hourlyData.freezing_level_height?.[i] ?? null;
+
+    const visKm = vis / 1000;
+    // Open-Meteo returns data for the grid-cell elevation; we compute altitude-specific temperatures
+    // using the standard lapse rate from the Open-Meteo grid-cell elevation (~resort lat/lon surface).
+    // Open-Meteo's default elevation is the model grid-cell elevation.
+    const apiElevation = hourlyData._apiElevation ?? baseElev;
+
+    const tempBase = temp2m !== null ? adjustTemperatureForElevation(temp2m, apiElevation, baseElev) : null;
+    const tempMid = temp2m !== null ? adjustTemperatureForElevation(temp2m, apiElevation, midElev) : null;
+    const tempPeak = temp2m !== null ? adjustTemperatureForElevation(temp2m, apiElevation, peakElev) : null;
+
+    // Estimate snow depth at different altitudes (simple linear interpolation based on temp)
+    // Snow depth increases at higher/colder elevations
+    const snowDepthBase = Math.round(snowDepth * 100) / 100;
+    const snowDepthMid = Math.round(snowDepth * (1 + Math.max(0, (midElev - baseElev)) / 2000) * 100) / 100;
+    const snowDepthPeak = Math.round(snowDepth * (1 + Math.max(0, (peakElev - baseElev)) / 1500) * 100) / 100;
+
+    timeline.push({
+      hour,
+      snowfall: Math.round(snowfall * 10) / 10,
+      precipitation: Math.round(precipitation * 10) / 10,
+      temperature: {
+        base: tempBase,
+        mid: tempMid,
+        peak: tempPeak,
+      },
+      windSpeed: Math.round(wind * 10) / 10,
+      visibility: Math.round(visKm * 10) / 10,
+      visibilityLabel: visibilityLabel(visKm),
+      cloudCover: Math.round(cloud),
+      skyCondition: skyCondition(cloud),
+      snowDepth: {
+        base: snowDepthBase,
+        mid: snowDepthMid,
+        peak: snowDepthPeak,
+      },
+      freezingLevel: freezingLevel !== null ? Math.round(freezingLevel) : null,
+    });
+  }
+
+  return timeline;
+}
+
+/**
  * Compute total snowfall for a given date from hourly data.
  */
 export function dayTotalSnowfall(hourlyData, forecastDate) {
@@ -102,6 +181,20 @@ export function dayTotalSnowfall(hourlyData, forecastDate) {
   for (let i = 0; i < hourlyData.time.length; i++) {
     if (hourlyData.time[i].startsWith(forecastDate)) {
       total += hourlyData.snowfall?.[i] ?? 0;
+    }
+  }
+  return Math.round(total * 10) / 10;
+}
+
+/**
+ * Compute total precipitation for a given date from hourly data.
+ */
+export function dayTotalPrecipitation(hourlyData, forecastDate) {
+  if (!hourlyData || !hourlyData.time) return 0;
+  let total = 0;
+  for (let i = 0; i < hourlyData.time.length; i++) {
+    if (hourlyData.time[i].startsWith(forecastDate)) {
+      total += hourlyData.precipitation?.[i] ?? 0;
     }
   }
   return Math.round(total * 10) / 10;

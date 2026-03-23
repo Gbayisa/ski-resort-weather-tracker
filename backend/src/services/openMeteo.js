@@ -10,7 +10,7 @@ export async function fetchWeatherData(lat, lon, forecastDate) {
   const params = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lon.toString(),
-    hourly: 'snowfall,wind_speed_10m,visibility,cloud_cover',
+    hourly: 'snowfall,precipitation,temperature_2m,snow_depth,freezing_level_height,wind_speed_10m,visibility,cloud_cover',
     past_days: '3',
     forecast_days: '16',
     timezone: 'auto',

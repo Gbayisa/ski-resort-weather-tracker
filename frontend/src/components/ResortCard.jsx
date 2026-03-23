@@ -1,11 +1,21 @@
-import ForecastBlock from './ForecastBlock.jsx';
+import { useState } from 'react';
 
 export default function ResortCard({ resort, date }) {
+  const [altitude, setAltitude] = useState('mid');
+
   const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
   });
+
+  const elev = resort.elevations || { base: 0, mid: 0, peak: 0 };
+
+  // Get current altitude-specific data from the first available hourly entry
+  const timeline = resort.hourlyTimeline || [];
+  const avgTemp = getAvgTemp(timeline, altitude);
+  const latestSnowDepth = getLatestSnowDepth(timeline, altitude);
+  const avgFreezingLevel = getAvgFreezingLevel(timeline);
 
   return (
     <div className="resort-card">
@@ -15,19 +25,75 @@ export default function ResortCard({ resort, date }) {
           <div className="resort-meta">
             {resort.region && <span>📍 {resort.region}, {resort.country}</span>}
             <span>📅 {formattedDate}</span>
+            <span className="resort-elevation-range">
+              ⛰️ {elev.base}m – {elev.peak}m
+            </span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="resort-badges">
           <span className="resort-distance">📏 {resort.distance} km</span>
           <span className="resort-snowfall-badge">❄️ {resort.daySnowfall} cm</span>
+          {resort.dayPrecipitation > 0 && (
+            <span className="resort-precip-badge">🌧️ {resort.dayPrecipitation} mm</span>
+          )}
         </div>
       </div>
 
-      <div className="forecast-grid">
-        <ForecastBlock title="🌅 Morning (6am–12pm)" data={resort.morning} />
-        <ForecastBlock title="☀️ Afternoon (12pm–6pm)" data={resort.afternoon} />
+      {/* Altitude Toggle */}
+      <div className="altitude-toggle">
+        <button
+          className={`altitude-btn ${altitude === 'base' ? 'active' : ''}`}
+          onClick={() => setAltitude('base')}
+        >
+          🏠 Base ({elev.base}m)
+        </button>
+        <button
+          className={`altitude-btn ${altitude === 'mid' ? 'active' : ''}`}
+          onClick={() => setAltitude('mid')}
+        >
+          ⛷️ Mid ({elev.mid}m)
+        </button>
+        <button
+          className={`altitude-btn ${altitude === 'peak' ? 'active' : ''}`}
+          onClick={() => setAltitude('peak')}
+        >
+          🏔️ Peak ({elev.peak}m)
+        </button>
       </div>
 
+      {/* Summary Stats at selected altitude */}
+      <div className="altitude-summary">
+        <div className="summary-stat">
+          <span className="summary-label">🌡️ Avg Temp</span>
+          <span className="summary-value">{avgTemp !== null ? `${avgTemp}°C` : '—'}</span>
+        </div>
+        <div className="summary-stat">
+          <span className="summary-label">❄️ Snow Depth</span>
+          <span className="summary-value">{latestSnowDepth !== null ? `${latestSnowDepth} cm` : '—'}</span>
+        </div>
+        <div className="summary-stat">
+          <span className="summary-label">🧊 Freezing Level</span>
+          <span className="summary-value">{avgFreezingLevel !== null ? `${avgFreezingLevel}m` : '—'}</span>
+        </div>
+        <div className="summary-stat">
+          <span className="summary-label">🌧️ Precipitation</span>
+          <span className="summary-value">{resort.dayPrecipitation ?? 0} mm</span>
+        </div>
+      </div>
+
+      {/* Hourly Timeline */}
+      {timeline.length > 0 && (
+        <div className="hourly-timeline-section">
+          <div className="timeline-title">📊 24-Hour Forecast</div>
+          <div className="hourly-timeline">
+            {timeline.map((entry) => (
+              <HourlyEntry key={entry.hour} entry={entry} altitude={altitude} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* History */}
       {resort.history && resort.history.length > 0 && (
         <div className="history-section">
           <div className="history-title">❄️ Snowfall — Last 3 Days</div>
@@ -56,4 +122,81 @@ export default function ResortCard({ resort, date }) {
       )}
     </div>
   );
+}
+
+function HourlyEntry({ entry, altitude }) {
+  const temp = entry.temperature?.[altitude] ?? null;
+  const snowDepth = entry.snowDepth?.[altitude] ?? null;
+  const isSnowing = entry.snowfall > 0;
+  const isRaining = entry.precipitation > 0 && !isSnowing;
+
+  const skyIcon = entry.skyCondition === 'sunny'
+    ? '☀️'
+    : entry.skyCondition === 'partly cloudy'
+    ? '⛅'
+    : '☁️';
+
+  const precipIcon = isSnowing ? '❄️' : isRaining ? '🌧️' : '';
+  const precipValue = isSnowing
+    ? `${entry.snowfall}cm`
+    : isRaining
+    ? `${entry.precipitation}mm`
+    : '';
+
+  // Bar height for snowfall (max ~5cm per hour = 100%)
+  const snowBarHeight = Math.min(100, (entry.snowfall / 3) * 100);
+  const precipBarHeight = Math.min(100, (entry.precipitation / 5) * 100);
+
+  return (
+    <div className="hourly-entry">
+      <div className="hourly-time">{formatHour(entry.hour)}</div>
+      <div className="hourly-sky">{skyIcon}</div>
+      <div className="hourly-temp" style={{ color: temp !== null && temp <= 0 ? '#3b82f6' : '#ef4444' }}>
+        {temp !== null ? `${temp}°` : '—'}
+      </div>
+      <div className="hourly-precip-bar">
+        {entry.snowfall > 0 && (
+          <div className="snow-bar" style={{ height: `${snowBarHeight}%` }} title={`Snow: ${entry.snowfall}cm`} />
+        )}
+        {entry.precipitation > 0 && entry.snowfall === 0 && (
+          <div className="rain-bar" style={{ height: `${precipBarHeight}%` }} title={`Rain: ${entry.precipitation}mm`} />
+        )}
+      </div>
+      <div className="hourly-precip-text">
+        {precipIcon} {precipValue}
+      </div>
+      <div className="hourly-wind">💨 {entry.windSpeed}</div>
+    </div>
+  );
+}
+
+function formatHour(h) {
+  if (h === 0) return '12am';
+  if (h < 12) return `${h}am`;
+  if (h === 12) return '12pm';
+  return `${h - 12}pm`;
+}
+
+function getAvgTemp(timeline, altitude) {
+  const temps = timeline
+    .map((e) => e.temperature?.[altitude])
+    .filter((t) => t !== null && t !== undefined);
+  if (temps.length === 0) return null;
+  return Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 10) / 10;
+}
+
+function getLatestSnowDepth(timeline, altitude) {
+  // Get the most representative snow depth (midday value or last available)
+  const middayEntry = timeline.find((e) => e.hour === 12) || timeline[timeline.length - 1];
+  if (!middayEntry) return null;
+  const depth = middayEntry.snowDepth?.[altitude];
+  return depth !== null && depth !== undefined ? Math.round(depth * 100) / 100 : null;
+}
+
+function getAvgFreezingLevel(timeline) {
+  const levels = timeline
+    .map((e) => e.freezingLevel)
+    .filter((l) => l !== null && l !== undefined);
+  if (levels.length === 0) return null;
+  return Math.round(levels.reduce((a, b) => a + b, 0) / levels.length);
 }
