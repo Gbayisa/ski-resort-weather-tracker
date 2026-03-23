@@ -2,7 +2,9 @@ import { getDb } from '../db/database.js';
 import { fetchWeatherData } from './openMeteo.js';
 import {
   parseForecastBlocks,
+  parseHourlyTimeline,
   dayTotalSnowfall,
+  dayTotalPrecipitation,
   historicalSnowfall,
 } from './forecastUtils.js';
 
@@ -45,15 +47,35 @@ export async function getWeatherForResort(resort, forecastDate) {
     }
   }
 
+  const elevBase = resort.elevation_base || 0;
+  const elevPeak = resort.elevation_peak || 0;
+  const elevMid = Math.round((elevBase + elevPeak) / 2);
+
+  const elevations = { base: elevBase, mid: elevMid, peak: elevPeak };
+
+  // Store the API elevation (Open-Meteo grid-cell) so lapse-rate calcs can use it
+  if (hourlyData) {
+    hourlyData._apiElevation = elevBase; // approximate: resort lat/lon is near base
+  }
+
   const { morning, afternoon } = parseForecastBlocks(hourlyData, forecastDate);
+  const hourlyTimeline = parseHourlyTimeline(hourlyData, forecastDate, elevations);
   const daySnowfall = dayTotalSnowfall(hourlyData, forecastDate);
+  const dayPrecipitation = dayTotalPrecipitation(hourlyData, forecastDate);
   const history = historicalSnowfall(hourlyData, forecastDate, 3);
 
   return {
     morning,
     afternoon,
+    hourlyTimeline,
     daySnowfall,
+    dayPrecipitation,
     history,
+    elevations: {
+      base: elevBase,
+      mid: elevMid,
+      peak: elevPeak,
+    },
   };
 }
 

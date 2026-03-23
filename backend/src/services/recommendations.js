@@ -53,9 +53,12 @@ export async function getRecommendations({ lat, lon, date, radiusKm = 200, minSn
         distance: resort.distance,
         forecastDate: date,
         daySnowfall: weather.daySnowfall,
+        dayPrecipitation: weather.dayPrecipitation,
         morning: weather.morning,
         afternoon: weather.afternoon,
+        hourlyTimeline: weather.hourlyTimeline,
         history: weather.history,
+        elevations: weather.elevations,
       });
     }
   }
