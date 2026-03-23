@@ -595,4 +595,159 @@ describe('freshSnowfall', () => {
     );
     expect(result).toBe(72);
   });
+
+  // ---------------------------------------------------------------------------
+  // Test 1 — current/past selected date: Mar 23, D-2=Mar21=1.6, D-1=Mar22=1.4 → badge=3.0
+  // ---------------------------------------------------------------------------
+  it('Test 1 — badge equals 3.0 when Mar 21 = 1.6 cm and Mar 22 = 1.4 cm (selected date Mar 23)', () => {
+    const times = [];
+    const snowfall = [];
+    const temperature_2m = [];
+    // Mar 21: 1.6 cm total (single hour for simplicity)
+    // Mar 22: 1.4 cm total
+    // Mar 23: 2.0 cm (forecast date — should NOT be counted)
+    const dailySnow = { '2026-03-21': 1.6, '2026-03-22': 1.4, '2026-03-23': 2.0 };
+    for (const [date, dayTotal] of Object.entries(dailySnow)) {
+      times.push(`${date}T00:00`);
+      snowfall.push(dayTotal);
+      temperature_2m.push(-5);
+      for (let h = 1; h < 24; h++) {
+        const hh = String(h).padStart(2, '0');
+        times.push(`${date}T${hh}:00`);
+        snowfall.push(0);
+        temperature_2m.push(-5);
+      }
+    }
+    const hourlyData = { time: times, snowfall, temperature_2m };
+    const result = freshSnowfall(
+      hourlyData,
+      '2026-03-23',
+      { base: 500, mid: 1200, peak: 1800 },
+      500,
+    );
+    expect(result).toBe(3.0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 2 — dynamic shifting: selected date Mar 27 must use Mar 25 and Mar 26
+  // ---------------------------------------------------------------------------
+  it('Test 2 — selected date Mar 27 uses Mar 25 and Mar 26 for badge and history cards', () => {
+    const times = [];
+    const snowfall = [];
+    const temperature_2m = [];
+    // Mar 25 = 2.5 cm, Mar 26 = 1.5 cm (forecast values), Mar 27 = 0 (not counted)
+    const dailySnow = { '2026-03-25': 2.5, '2026-03-26': 1.5, '2026-03-27': 0 };
+    for (const [date, dayTotal] of Object.entries(dailySnow)) {
+      times.push(`${date}T00:00`);
+      snowfall.push(dayTotal);
+      temperature_2m.push(-5);
+      for (let h = 1; h < 24; h++) {
+        const hh = String(h).padStart(2, '0');
+        times.push(`${date}T${hh}:00`);
+        snowfall.push(0);
+        temperature_2m.push(-5);
+      }
+    }
+    const hourlyData = { time: times, snowfall, temperature_2m };
+    // Verify the two cards use the right dates
+    const history = historicalSnowfall(
+      hourlyData,
+      '2026-03-27',
+      2,
+      { base: 500, mid: 1200, peak: 1800 },
+      500,
+    );
+    expect(history).toHaveLength(2);
+    expect(history[0].date).toBe('2026-03-25'); // D-2
+    expect(history[1].date).toBe('2026-03-26'); // D-1
+    // Verify freshSnow badge = sum of those two cards
+    const badge = freshSnowfall(
+      hourlyData,
+      '2026-03-27',
+      { base: 500, mid: 1200, peak: 1800 },
+      500,
+    );
+    const cardSum = Math.round(
+      ((history[0].snowfallMid ?? history[0].snowfall ?? 0) +
+        (history[1].snowfallMid ?? history[1].snowfall ?? 0)) *
+        10,
+    ) / 10;
+    expect(badge).toBe(cardSum);
+    expect(badge).toBe(4.0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 3 — future date uses forecast snowfall values for D-2 and D-1
+  // ---------------------------------------------------------------------------
+  it('Test 3 — future selected date uses forecast snowfall for D-2 and D-1 cards', () => {
+    const times = [];
+    const snowfall = [];
+    const temperature_2m = [];
+    // Simulate forecast data for a future week (today + 4 and +5 days as D-2/D-1)
+    // forecastDate = 2026-04-01 → D-2 = 2026-03-30 = 3.0 cm, D-1 = 2026-03-31 = 1.0 cm
+    const dailySnow = { '2026-03-30': 3.0, '2026-03-31': 1.0, '2026-04-01': 0 };
+    for (const [date, dayTotal] of Object.entries(dailySnow)) {
+      times.push(`${date}T00:00`);
+      snowfall.push(dayTotal);
+      temperature_2m.push(-5);
+      for (let h = 1; h < 24; h++) {
+        const hh = String(h).padStart(2, '0');
+        times.push(`${date}T${hh}:00`);
+        snowfall.push(0);
+        temperature_2m.push(-5);
+      }
+    }
+    const hourlyData = { time: times, snowfall, temperature_2m };
+    const history = historicalSnowfall(
+      hourlyData,
+      '2026-04-01',
+      2,
+      { base: 500, mid: 1200, peak: 1800 },
+      500,
+    );
+    expect(history[0].date).toBe('2026-03-30');
+    expect(history[1].date).toBe('2026-03-31');
+    // The values come from forecast data
+    expect(history[0].snowfallMid).toBeGreaterThan(0);
+    expect(history[1].snowfallMid).toBeGreaterThan(0);
+    const badge = freshSnowfall(
+      hourlyData,
+      '2026-04-01',
+      { base: 500, mid: 1200, peak: 1800 },
+      500,
+    );
+    expect(badge).toBe(4.0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 5 — consistency: badge always equals sum of the two displayed cards
+  // ---------------------------------------------------------------------------
+  it('Test 5 — badge is always the numeric sum of the two history card values', () => {
+    const times = [];
+    const snowfall = [];
+    const temperature_2m = [];
+    // Arbitrary snowfall values for D-2 and D-1
+    const dailySnow = { '2026-02-10': 5.5, '2026-02-11': 2.3, '2026-02-12': 0 };
+    for (const [date, dayTotal] of Object.entries(dailySnow)) {
+      times.push(`${date}T00:00`);
+      snowfall.push(dayTotal);
+      temperature_2m.push(-5);
+      for (let h = 1; h < 24; h++) {
+        const hh = String(h).padStart(2, '0');
+        times.push(`${date}T${hh}:00`);
+        snowfall.push(0);
+        temperature_2m.push(-5);
+      }
+    }
+    const hourlyData = { time: times, snowfall, temperature_2m };
+    const elevations = { base: 500, mid: 1200, peak: 1800 };
+    const history = historicalSnowfall(hourlyData, '2026-02-12', 2, elevations, 500);
+    const badge = freshSnowfall(hourlyData, '2026-02-12', elevations, 500);
+    const cardSum = Math.round(
+      ((history[0].snowfallMid ?? history[0].snowfall ?? 0) +
+        (history[1].snowfallMid ?? history[1].snowfall ?? 0)) *
+        10,
+    ) / 10;
+    expect(badge).toBe(cardSum);
+  });
 });

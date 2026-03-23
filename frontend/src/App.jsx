@@ -14,7 +14,7 @@ function getTomorrowDate() {
 
 function getMaxDate() {
   const d = new Date();
-  d.setDate(d.getDate() + 15);
+  d.setDate(d.getDate() + 7);
   return d.toISOString().split('T')[0];
 }
 

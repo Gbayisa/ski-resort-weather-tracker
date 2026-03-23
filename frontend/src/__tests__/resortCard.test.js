@@ -171,7 +171,7 @@ describe('Resort data shape for new features', () => {
     forecastDate: '2026-01-15',
     daySnowfall: 8.5,
     daySnowfallMid: 9.2,
-    freshSnow: 5.5,
+    freshSnow: 8.0,
     dayPrecipitation: 2.3,
     elevations: { base: 2475, mid: 3001, peak: 3527 },
     hourlyTimeline: [
@@ -192,7 +192,6 @@ describe('Resort data shape for new features', () => {
     history: [
       { date: '2026-01-13', snowfall: 3.0, snowfallMid: 3.0 },
       { date: '2026-01-14', snowfall: 5.0, snowfallMid: 5.0 },
-      { date: '2026-01-15', snowfall: 9.2, snowfallMid: 9.2, isForecast: true },
     ],
   };
 
@@ -241,13 +240,45 @@ describe('Resort data shape for new features', () => {
     expect(entry.precipitation).toBeDefined();
   });
 
-  it('history contains 2 past days plus today marked as forecast', () => {
-    expect(mockResort.history).toHaveLength(3);
-    const today = mockResort.history[2];
-    expect(today.date).toBe('2026-01-15');
-    expect(today.isForecast).toBe(true);
-    // Past days should not have isForecast
+  it('history contains exactly the 2 days before the selected date (D-2 and D-1)', () => {
+    expect(mockResort.history).toHaveLength(2);
+    expect(mockResort.history[0].date).toBe('2026-01-13'); // D-2
+    expect(mockResort.history[1].date).toBe('2026-01-14'); // D-1
+    // Neither should carry an isForecast flag (both are past dates)
     expect(mockResort.history[0].isForecast).toBeFalsy();
     expect(mockResort.history[1].isForecast).toBeFalsy();
+  });
+
+  it('freshSnow badge equals the numeric sum of the two history cards (Test 5 — consistency)', () => {
+    const card0 = mockResort.history[0].snowfallMid ?? mockResort.history[0].snowfall ?? 0;
+    const card1 = mockResort.history[1].snowfallMid ?? mockResort.history[1].snowfall ?? 0;
+    const expectedBadge = Math.round((card0 + card1) * 10) / 10;
+    expect(mockResort.freshSnow).toBe(expectedBadge);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Forecast horizon cap (Test 4)
+// ---------------------------------------------------------------------------
+function getMaxDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().split('T')[0];
+}
+
+describe('Forecast horizon cap', () => {
+  it('max selectable date is exactly 7 days from today', () => {
+    const today = new Date();
+    const expected = new Date(today);
+    expected.setDate(expected.getDate() + 7);
+    const expectedStr = expected.toISOString().split('T')[0];
+    expect(getMaxDate()).toBe(expectedStr);
+  });
+
+  it('max date is no more than 7 days in the future', () => {
+    const todayMs = new Date().setHours(0, 0, 0, 0);
+    const maxMs = new Date(getMaxDate() + 'T00:00:00').setHours(0, 0, 0, 0);
+    const diffDays = (maxMs - todayMs) / (1000 * 60 * 60 * 24);
+    expect(diffDays).toBeLessThanOrEqual(7);
   });
 });
