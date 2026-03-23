@@ -6,6 +6,7 @@ import {
   dayTotalSnowfall,
   dayTotalPrecipitation,
   historicalSnowfall,
+  snowfallLast24Hours,
 } from './forecastUtils.js';
 
 const CACHE_TTL_HOURS = 3;
@@ -62,7 +63,11 @@ export async function getWeatherForResort(resort, forecastDate) {
   const hourlyTimeline = parseHourlyTimeline(hourlyData, forecastDate, elevations);
   const daySnowfall = dayTotalSnowfall(hourlyData, forecastDate);
   const dayPrecipitation = dayTotalPrecipitation(hourlyData, forecastDate);
-  const history = historicalSnowfall(hourlyData, forecastDate, 3);
+  const history = historicalSnowfall(hourlyData, forecastDate, 3, elevations, elevBase);
+
+  // Rolling 24h snowfall at mid altitude — used for the badge and minSnowfall filter
+  const snowfall24hData = snowfallLast24Hours(hourlyData, new Date().toISOString(), elevations, elevBase);
+  const snowfall24h = snowfall24hData.mid;
 
   return {
     morning,
@@ -70,6 +75,7 @@ export async function getWeatherForResort(resort, forecastDate) {
     hourlyTimeline,
     daySnowfall,
     dayPrecipitation,
+    snowfall24h,
     history,
     elevations: {
       base: elevBase,
