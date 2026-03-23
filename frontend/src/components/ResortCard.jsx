@@ -11,11 +11,15 @@ export default function ResortCard({ resort, date }) {
 
   const elev = resort.elevations || { base: 0, mid: 0, peak: 0 };
 
-  // Get current altitude-specific data from the first available hourly entry
+  // Get current altitude-specific data from the hourly timeline
   const timeline = resort.hourlyTimeline || [];
   const avgTemp = getAvgTemp(timeline, altitude);
   const latestSnowDepth = getLatestSnowDepth(timeline, altitude);
   const avgFreezingLevel = getAvgFreezingLevel(timeline);
+  const avgVisibility = getAvgVisibility(timeline);
+
+  // Rolling 24h snowfall badge — prefer altitude-specific value at mid
+  const snowfall24h = resort.snowfall24h ?? resort.daySnowfall ?? 0;
 
   return (
     <div className="resort-card">
@@ -32,7 +36,7 @@ export default function ResortCard({ resort, date }) {
         </div>
         <div className="resort-badges">
           <span className="resort-distance">📏 {resort.distance} km</span>
-          <span className="resort-snowfall-badge">❄️ {resort.daySnowfall} cm</span>
+          <span className="resort-snowfall-badge">❄️ {snowfall24h} cm</span>
           {resort.dayPrecipitation > 0 && (
             <span className="resort-precip-badge">🌧️ {resort.dayPrecipitation} mm</span>
           )}
@@ -79,6 +83,10 @@ export default function ResortCard({ resort, date }) {
           <span className="summary-label">🌧️ Precipitation</span>
           <span className="summary-value">{resort.dayPrecipitation ?? 0} mm</span>
         </div>
+        <div className="summary-stat">
+          <span className="summary-label">👁️ Visibility</span>
+          <span className="summary-value">{avgVisibility !== null ? `${avgVisibility} km` : '—'}</span>
+        </div>
       </div>
 
       {/* Hourly Timeline */}
@@ -103,7 +111,7 @@ export default function ResortCard({ resort, date }) {
                 <div className="history-day-date">
                   {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                 </div>
-                <div className="history-day-value">{day.snowfall} cm</div>
+                <div className="history-day-value">{day.snowfallMid ?? day.snowfall} cm</div>
               </div>
             ))}
           </div>
@@ -127,7 +135,14 @@ export default function ResortCard({ resort, date }) {
 function HourlyEntry({ entry, altitude }) {
   const temp = entry.temperature?.[altitude] ?? null;
   const snowDepth = entry.snowDepth?.[altitude] ?? null;
-  const isSnowing = entry.snowfall > 0;
+
+  // Support both object (altitude-specific) and legacy scalar snowfall values
+  const snowfallAtAlt =
+    entry.snowfall && typeof entry.snowfall === 'object'
+      ? (entry.snowfall[altitude] ?? 0)
+      : (entry.snowfall ?? 0);
+
+  const isSnowing = snowfallAtAlt > 0;
   const isRaining = entry.precipitation > 0 && !isSnowing;
 
   const skyIcon = entry.skyCondition === 'sunny'
@@ -138,13 +153,13 @@ function HourlyEntry({ entry, altitude }) {
 
   const precipIcon = isSnowing ? '❄️' : isRaining ? '🌧️' : '';
   const precipValue = isSnowing
-    ? `${entry.snowfall}cm`
+    ? `${snowfallAtAlt}cm`
     : isRaining
     ? `${entry.precipitation}mm`
     : '';
 
-  // Bar height for snowfall (max ~5cm per hour = 100%)
-  const snowBarHeight = Math.min(100, (entry.snowfall / 3) * 100);
+  // Bar height for snowfall (max ~3cm per hour = 100%)
+  const snowBarHeight = Math.min(100, (snowfallAtAlt / 3) * 100);
   const precipBarHeight = Math.min(100, (entry.precipitation / 5) * 100);
 
   return (
@@ -155,10 +170,10 @@ function HourlyEntry({ entry, altitude }) {
         {temp !== null ? `${temp}°` : '—'}
       </div>
       <div className="hourly-precip-bar">
-        {entry.snowfall > 0 && (
-          <div className="snow-bar" style={{ height: `${snowBarHeight}%` }} title={`Snow: ${entry.snowfall}cm`} />
+        {snowfallAtAlt > 0 && (
+          <div className="snow-bar" style={{ height: `${snowBarHeight}%` }} title={`Snow: ${snowfallAtAlt}cm`} />
         )}
-        {entry.precipitation > 0 && entry.snowfall === 0 && (
+        {entry.precipitation > 0 && snowfallAtAlt === 0 && (
           <div className="rain-bar" style={{ height: `${precipBarHeight}%` }} title={`Rain: ${entry.precipitation}mm`} />
         )}
       </div>
@@ -166,6 +181,7 @@ function HourlyEntry({ entry, altitude }) {
         {precipIcon} {precipValue}
       </div>
       <div className="hourly-wind">💨 {entry.windSpeed}</div>
+      <div className="hourly-visibility">👁️ {entry.visibility}km</div>
     </div>
   );
 }
@@ -190,7 +206,7 @@ function getLatestSnowDepth(timeline, altitude) {
   const middayEntry = timeline.find((e) => e.hour === 12) || timeline[timeline.length - 1];
   if (!middayEntry) return null;
   const depth = middayEntry.snowDepth?.[altitude];
-  return depth !== null && depth !== undefined ? Math.round(depth * 100) / 100 : null;
+  return depth !== null && depth !== undefined ? depth : null;
 }
 
 function getAvgFreezingLevel(timeline) {
@@ -199,4 +215,12 @@ function getAvgFreezingLevel(timeline) {
     .filter((l) => l !== null && l !== undefined);
   if (levels.length === 0) return null;
   return Math.round(levels.reduce((a, b) => a + b, 0) / levels.length);
+}
+
+function getAvgVisibility(timeline) {
+  const vals = timeline
+    .map((e) => e.visibility)
+    .filter((v) => v !== null && v !== undefined);
+  if (vals.length === 0) return null;
+  return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
 }

@@ -45,6 +45,36 @@ export function adjustTemperatureForElevation(baseTemp, baseElevation, targetEle
   return Math.round((baseTemp - (elevDiff / 1000) * LAPSE_RATE) * 10) / 10;
 }
 
+/** Snow/rain threshold: precipitation falls as snow at or below this temperature (°C). */
+const SNOW_THRESHOLD_TEMP_C = 1.0;
+
+/**
+ * Open-Meteo conversion factor: divide snowfall cm by this to get liquid-equivalent mm.
+ * Equivalently, multiply precipitation mm by this to estimate snowfall cm.
+ * Source: Open-Meteo docs — "For the water equivalent in millimeter, divide by 7."
+ */
+const PRECIP_TO_SNOW_FACTOR = 7;
+
+/**
+ * Compute snowfall at a given altitude.
+ * If temperature at that altitude is at/below the snow threshold (1°C),
+ * precipitation falls as snow. If the API reports 0 snowfall (rain at base)
+ * but the altitude is cold enough, convert precipitation to snowfall using
+ * Open-Meteo's factor: 1 mm liquid ≈ 7 cm snow.
+ */
+function computeSnowfallAtAlt(snowfall, precipitation, tempAtAlt) {
+  if (tempAtAlt === null || tempAtAlt === undefined) {
+    return Math.round(snowfall * 10) / 10;
+  }
+  if (tempAtAlt <= SNOW_THRESHOLD_TEMP_C) {
+    if (snowfall > 0) return Math.round(snowfall * 10) / 10;
+    // Base is raining but altitude is cold enough for snow
+    return Math.round(precipitation * PRECIP_TO_SNOW_FACTOR * 10) / 10;
+  }
+  // Above snow threshold — rain at this altitude
+  return 0;
+}
+
 /**
  * Parse hourly forecast data into morning and afternoon blocks.
  * Morning: 06:00–11:59, Afternoon: 12:00–17:59
@@ -140,15 +170,21 @@ export function parseHourlyTimeline(hourlyData, forecastDate, elevations) {
     const tempMid = temp2m !== null ? adjustTemperatureForElevation(temp2m, apiElevation, midElev) : null;
     const tempPeak = temp2m !== null ? adjustTemperatureForElevation(temp2m, apiElevation, peakElev) : null;
 
-    // Estimate snow depth at different altitudes (simple linear interpolation based on temp)
+    // Open-Meteo returns snow_depth in meters — convert to cm
     // Snow depth increases at higher/colder elevations
-    const snowDepthBase = Math.round(snowDepth * 100) / 100;
-    const snowDepthMid = Math.round(snowDepth * (1 + Math.max(0, (midElev - baseElev)) / 2000) * 100) / 100;
-    const snowDepthPeak = Math.round(snowDepth * (1 + Math.max(0, (peakElev - baseElev)) / 1500) * 100) / 100;
+    const snowDepthCm = snowDepth * 100;
+    const snowDepthBase = Math.round(snowDepthCm);
+    const snowDepthMid = Math.round(snowDepthCm * (1 + Math.max(0, (midElev - baseElev)) / 2000));
+    const snowDepthPeak = Math.round(snowDepthCm * (1 + Math.max(0, (peakElev - baseElev)) / 1500));
 
     timeline.push({
       hour,
-      snowfall: Math.round(snowfall * 10) / 10,
+      // Altitude-specific snowfall: above the snow threshold precipitation falls as snow
+      snowfall: {
+        base: Math.round(snowfall * 10) / 10,
+        mid: computeSnowfallAtAlt(snowfall, precipitation, tempMid),
+        peak: computeSnowfallAtAlt(snowfall, precipitation, tempPeak),
+      },
       precipitation: Math.round(precipitation * 10) / 10,
       temperature: {
         base: tempBase,
@@ -202,18 +238,97 @@ export function dayTotalPrecipitation(hourlyData, forecastDate) {
 
 /**
  * Compute snowfall totals for the past N days from hourly data.
+ * Optionally computes altitude-adjusted snowfall at mid level.
  */
-export function historicalSnowfall(hourlyData, forecastDate, days = 3) {
+export function historicalSnowfall(hourlyData, forecastDate, days = 3, elevations, apiElevation) {
   const result = [];
   const baseDate = new Date(forecastDate + 'T00:00:00');
+  const { base: baseElev = 0, mid: midElev = 0, peak: peakElev = 0 } = elevations || {};
+  const _apiElevation = apiElevation ?? baseElev;
+
   for (let d = 1; d <= days; d++) {
     const pastDate = new Date(baseDate);
     pastDate.setDate(pastDate.getDate() - d);
     const dateStr = pastDate.toISOString().split('T')[0];
+
+    let snowMid = 0;
+    if (hourlyData && hourlyData.time) {
+      for (let i = 0; i < hourlyData.time.length; i++) {
+        if (!hourlyData.time[i].startsWith(dateStr)) continue;
+        const sf = hourlyData.snowfall?.[i] ?? 0;
+        const precip = hourlyData.precipitation?.[i] ?? 0;
+        const temp2m = hourlyData.temperature_2m?.[i] ?? null;
+        const tempMid =
+          temp2m !== null
+            ? adjustTemperatureForElevation(temp2m, _apiElevation, midElev)
+            : null;
+        snowMid += computeSnowfallAtAlt(sf, precip, tempMid);
+      }
+    }
+
     result.push({
       date: dateStr,
       snowfall: dayTotalSnowfall(hourlyData, dateStr),
+      snowfallMid: Math.round(snowMid * 10) / 10,
     });
   }
   return result.reverse();
+}
+
+/**
+ * Compute rolling 24-hour snowfall totals ending at the given current time.
+ * Returns altitude-specific values for base, mid, and peak.
+ *
+ * Note: Open-Meteo returns hourly timestamps in the resort's local timezone
+ * without a UTC offset (e.g. "2026-03-23T14:00"). This function treats those
+ * timestamps as UTC for comparison, which introduces an error equal to the
+ * resort's UTC offset (typically ±12 h maximum). For a rolling 24 h display
+ * this is an acceptable approximation; resorts in extreme time zones or during
+ * daylight-saving transitions may see a shift of up to a few hours.
+ */
+export function snowfallLast24Hours(hourlyData, currentTimeISO, elevations, apiElevation) {
+  if (!hourlyData || !hourlyData.time) return { base: 0, mid: 0, peak: 0 };
+
+  const { base: baseElev = 0, mid: midElev = 0, peak: peakElev = 0 } = elevations || {};
+  const _apiElevation = apiElevation ?? baseElev;
+
+  const now = new Date(currentTimeISO);
+  const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  // Build comparable strings from UTC components (hourly data has no tz offset)
+  const toHourStr = (d) => {
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const hour = String(d.getUTCHours()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hour}:00`;
+  };
+
+  const cutoffStr = toHourStr(cutoff);
+  const nowStr = toHourStr(now);
+
+  let snowBase = 0, snowMid = 0, snowPeak = 0;
+
+  for (let i = 0; i < hourlyData.time.length; i++) {
+    const t = hourlyData.time[i];
+    if (t <= cutoffStr || t > nowStr) continue;
+
+    const sf = hourlyData.snowfall?.[i] ?? 0;
+    const precip = hourlyData.precipitation?.[i] ?? 0;
+    const temp2m = hourlyData.temperature_2m?.[i] ?? null;
+    const tempMid =
+      temp2m !== null ? adjustTemperatureForElevation(temp2m, _apiElevation, midElev) : null;
+    const tempPeak =
+      temp2m !== null ? adjustTemperatureForElevation(temp2m, _apiElevation, peakElev) : null;
+
+    snowBase += sf;
+    snowMid += computeSnowfallAtAlt(sf, precip, tempMid);
+    snowPeak += computeSnowfallAtAlt(sf, precip, tempPeak);
+  }
+
+  return {
+    base: Math.round(snowBase * 10) / 10,
+    mid: Math.round(snowMid * 10) / 10,
+    peak: Math.round(snowPeak * 10) / 10,
+  };
 }

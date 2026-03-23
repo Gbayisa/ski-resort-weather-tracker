@@ -9,6 +9,7 @@ import {
   dayTotalSnowfall,
   dayTotalPrecipitation,
   historicalSnowfall,
+  snowfallLast24Hours,
 } from '../services/forecastUtils.js';
 
 // ---------------------------------------------------------------------------
@@ -209,7 +210,11 @@ describe('parseHourlyTimeline', () => {
 
     const entry = timeline[0];
     expect(entry.hour).toBe(0);
+    // snowfall is now an altitude-specific object
     expect(entry.snowfall).toBeDefined();
+    expect(entry.snowfall.base).toBeDefined();
+    expect(entry.snowfall.mid).toBeDefined();
+    expect(entry.snowfall.peak).toBeDefined();
     expect(entry.precipitation).toBeDefined();
     expect(entry.temperature).toBeDefined();
     expect(entry.temperature.base).toBeDefined();
@@ -247,9 +252,10 @@ describe('parseHourlyTimeline', () => {
     expect(entry.temperature.peak).toBe(-6.5);
   });
 
-  it('snow depth scales with altitude', () => {
+  it('snow depth scales with altitude and is in cm', () => {
+    // Open-Meteo returns snow_depth in meters; mock 1.0 m = 100 cm
     const hourlyData = makeHourlyData('2026-01-15', {
-      snow_depth: new Array(24).fill(100),
+      snow_depth: new Array(24).fill(1.0),
     });
     const timeline = parseHourlyTimeline(hourlyData, '2026-01-15', {
       base: 2000,
@@ -258,9 +264,9 @@ describe('parseHourlyTimeline', () => {
     });
 
     const entry = timeline[0];
-    // Snow depth at base should be 100
+    // Base: 1.0 m × 100 = 100 cm
     expect(entry.snowDepth.base).toBe(100);
-    // Mid should be > base
+    // Mid should be > base (higher altitude → more snow)
     expect(entry.snowDepth.mid).toBeGreaterThan(entry.snowDepth.base);
     // Peak should be > mid
     expect(entry.snowDepth.peak).toBeGreaterThan(entry.snowDepth.mid);
@@ -274,6 +280,29 @@ describe('parseHourlyTimeline', () => {
       peak: 3500,
     });
     expect(timeline).toHaveLength(0);
+  });
+
+  it('altitude-specific snowfall: converts precipitation to snow above freezing level', () => {
+    // At base (API elevation): 5°C, so snowfall=0 (raining). At peak (3500m): well below 0°C.
+    const hourlyData = makeHourlyData('2026-01-15', {
+      snowfall: new Array(24).fill(0),
+      precipitation: new Array(24).fill(1.0), // 1mm rain at base
+      temperature_2m: new Array(24).fill(5),  // 5°C at API elevation (2500m)
+      _apiElevation: 2500,
+    });
+    const timeline = parseHourlyTimeline(hourlyData, '2026-01-15', {
+      base: 2500,
+      mid: 3000,
+      peak: 3500,
+    });
+
+    const entry = timeline[0];
+    // Base (same as API elevation): 5°C → rain, snowfall = 0
+    expect(entry.snowfall.base).toBe(0);
+    // Mid (3000m, +500m): 5 - 3.25 = 1.75°C → above 1°C → rain, snowfall = 0
+    expect(entry.snowfall.mid).toBe(0);
+    // Peak (3500m, +1000m): 5 - 6.5 = -1.5°C → snow, 1mm × 7 = 7cm
+    expect(entry.snowfall.peak).toBe(7.0);
   });
 });
 
@@ -349,5 +378,94 @@ describe('historicalSnowfall', () => {
     expect(result[1].date).toBe('2026-01-13');
     expect(result[1].snowfall).toBe(24); // 24 hours * 1.0 cm
     expect(result[2].date).toBe('2026-01-14');
+  });
+
+  it('includes snowfallMid for altitude-adjusted historical totals', () => {
+    const times = [];
+    const snowfall = [];
+    const precipitation = [];
+    const temperature_2m = [];
+    for (let d = 12; d <= 15; d++) {
+      for (let h = 0; h < 24; h++) {
+        const hh = String(h).padStart(2, '0');
+        times.push(`2026-01-${d}T${hh}:00`);
+        snowfall.push(d === 13 ? 1.0 : 0);
+        precipitation.push(d === 13 ? 1.0 : 0);
+        temperature_2m.push(-5); // well below freezing
+      }
+    }
+
+    const hourlyData = { time: times, snowfall, precipitation, temperature_2m };
+    const result = historicalSnowfall(hourlyData, '2026-01-15', 3, { base: 1000, mid: 2000, peak: 3000 }, 1000);
+
+    expect(result[1].snowfallMid).toBe(24); // same as snowfall because temp is well below 1°C
+  });
+});
+
+// ---------------------------------------------------------------------------
+// snowfallLast24Hours
+// ---------------------------------------------------------------------------
+describe('snowfallLast24Hours', () => {
+  it('returns zeros for null data', () => {
+    const result = snowfallLast24Hours(null, '2026-01-15T12:00:00Z', {}, 0);
+    expect(result.base).toBe(0);
+    expect(result.mid).toBe(0);
+    expect(result.peak).toBe(0);
+  });
+
+  it('sums snowfall for exactly the past 24 hours (UTC)', () => {
+    // Build data for Jan 14 and Jan 15 (UTC)
+    const times = [];
+    const snowfall = [];
+    const precipitation = [];
+    const temperature_2m = [];
+    for (let d = 14; d <= 15; d++) {
+      for (let h = 0; h < 24; h++) {
+        const hh = String(h).padStart(2, '0');
+        times.push(`2026-01-${d}T${hh}:00`);
+        // 1cm/h on Jan 14, 0 on Jan 15
+        snowfall.push(d === 14 ? 1.0 : 0);
+        precipitation.push(0);
+        temperature_2m.push(-5);
+      }
+    }
+
+    const hourlyData = { time: times, snowfall, precipitation, temperature_2m };
+
+    // Current time is Jan 15 at 12:00 UTC — 24h window is Jan 14 13:00 to Jan 15 12:00
+    const result = snowfallLast24Hours(
+      hourlyData,
+      '2026-01-15T12:00:00Z',
+      { base: 1000, mid: 2000, peak: 3000 },
+      1000,
+    );
+
+    // Hours included: Jan 14 T13, T14, ..., T23 = 11 hours → 11 cm
+    expect(result.base).toBe(11);
+    expect(result.mid).toBe(11); // temp -5°C < 1°C so same as base
+  });
+
+  it('converts rain-at-base to snow-at-peak when altitude is above freezing', () => {
+    // 1 hour with 1mm precipitation but snowfall=0 (raining at base)
+    // API elevation = base (1000m), peak = 3000m → well below freezing
+    const hourlyData = {
+      time: ['2026-01-15T06:00'],
+      snowfall: [0],
+      precipitation: [1.0], // 1mm rain at base
+      temperature_2m: [5],  // 5°C at API elevation (base 1000m)
+    };
+    hourlyData._apiElevation = 1000;
+
+    // At peak (3000m): temp = 5 - (2000/1000 * 6.5) = 5 - 13 = -8°C → snowing
+    // snowfallAtPeak = 1mm * 7 = 7cm
+    const result = snowfallLast24Hours(
+      hourlyData,
+      '2026-01-15T12:00:00Z',
+      { base: 1000, mid: 2000, peak: 3000 },
+      1000,
+    );
+
+    expect(result.base).toBe(0);   // raining at base
+    expect(result.peak).toBe(7.0); // snowing at peak: 1mm × 7 = 7cm
   });
 });
