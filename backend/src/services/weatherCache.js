@@ -83,17 +83,19 @@ export async function getWeatherForResort(resort, forecastDate) {
   // Covers all 24 hours (observed + forecast) so it shows today's projected total.
   const daySnowfallMid = daySnowfallMidAlt(hourlyData, forecastDate, elevations, apiElev);
 
-  // Last 2 past days of actual snowfall, then append today's projected snowfall as the
-  // final entry so the history section always ends with the current day's forecast.
+  // Recent snowfall: the two calendar days immediately before the forecast date (D-2 and D-1).
+  // For a future selected date those days may themselves be in the future, so we mark them
+  // with isForecast so the UI can show the appropriate "(forecast)" label.
+  const today = new Date().toISOString().split('T')[0];
   const history = historicalSnowfall(hourlyData, forecastDate, 2, elevations, apiElev);
-  history.push({
-    date: forecastDate,
-    snowfall: daySnowfall,
-    snowfallMid: daySnowfallMid,
-    isForecast: true,
-  });
+  for (const entry of history) {
+    if (entry.date >= today) {
+      entry.isForecast = true;
+    }
+  }
 
-  // Fresh snow = sum of the last 2 days of actual mid-altitude snowfall (48 h window).
+  // Fresh snow = sum of the two displayed recent-day values (D-2 + D-1 at mid altitude).
+  // Derived from the same historicalSnowfall data so badge and cards are always consistent.
   const freshSnow = freshSnowfall(hourlyData, forecastDate, elevations, apiElev);
 
   return {

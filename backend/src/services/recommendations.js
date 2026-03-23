@@ -56,6 +56,7 @@ export async function getRecommendations({ lat, lon, date, radiusKm = 200, minSn
         daySnowfall: weather.daySnowfall,
         daySnowfallMid: weather.daySnowfallMid,
         dayPrecipitation: weather.dayPrecipitation,
+        freshSnow: weather.freshSnow,
         morning: weather.morning,
         afternoon: weather.afternoon,
         hourlyTimeline: weather.hourlyTimeline,
