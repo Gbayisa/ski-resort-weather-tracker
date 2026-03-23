@@ -41,7 +41,7 @@ export async function getRecommendations({ lat, lon, date, radiusKm = 200, minSn
     const weather = await getWeatherForResort(resort, date);
     if (!weather) continue;
 
-    const snowfallForFilter = weather.snowfall24h ?? weather.daySnowfall ?? 0;
+    const snowfallForFilter = weather.daySnowfallMid ?? weather.daySnowfall ?? 0;
     if (snowfallForFilter >= minSnowfall) {
       results.push({
         id: resort.id,
@@ -54,7 +54,7 @@ export async function getRecommendations({ lat, lon, date, radiusKm = 200, minSn
         distance: resort.distance,
         forecastDate: date,
         daySnowfall: weather.daySnowfall,
-        snowfall24h: weather.snowfall24h,
+        daySnowfallMid: weather.daySnowfallMid,
         dayPrecipitation: weather.dayPrecipitation,
         morning: weather.morning,
         afternoon: weather.afternoon,

@@ -170,6 +170,7 @@ describe('Resort data shape for new features', () => {
     distance: 50.5,
     forecastDate: '2026-01-15',
     daySnowfall: 8.5,
+    daySnowfallMid: 9.2,
     dayPrecipitation: 2.3,
     elevations: { base: 2475, mid: 3001, peak: 3527 },
     hourlyTimeline: [
@@ -202,9 +203,9 @@ describe('Resort data shape for new features', () => {
     expect(mockResort.elevations.peak).toBeGreaterThan(mockResort.elevations.base);
   });
 
-  it('has precipitation data', () => {
-    expect(mockResort.dayPrecipitation).toBeDefined();
-    expect(typeof mockResort.dayPrecipitation).toBe('number');
+  it('has daySnowfallMid (altitude-adjusted projected snowfall) data', () => {
+    expect(mockResort.daySnowfallMid).toBeDefined();
+    expect(typeof mockResort.daySnowfallMid).toBe('number');
   });
 
   it('has hourly timeline entries with altitude-specific temperatures', () => {
