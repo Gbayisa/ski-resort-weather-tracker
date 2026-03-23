@@ -308,6 +308,18 @@ export function historicalSnowfall(hourlyData, forecastDate, days = 3, elevation
 }
 
 /**
+ * Compute the total fresh snowfall (sum of mid-altitude snowfall) over the last
+ * two calendar days before `forecastDate`.
+ * "Fresh snow" means snow that has fallen in the 48 hours preceding the forecast
+ * date, i.e. the two most recent past days.
+ */
+export function freshSnowfall(hourlyData, forecastDate, elevations, apiElevation) {
+  const last2Days = historicalSnowfall(hourlyData, forecastDate, 2, elevations, apiElevation);
+  const total = last2Days.reduce((sum, day) => sum + (day.snowfallMid ?? day.snowfall ?? 0), 0);
+  return Math.round(total * 10) / 10;
+}
+
+/**
  * Compute rolling 24-hour snowfall totals ending at the given current time.
  * Returns altitude-specific values for base, mid, and peak.
  *

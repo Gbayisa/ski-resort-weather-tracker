@@ -672,6 +672,13 @@ body {
   color: var(--color-text-secondary);
 }
 
+.forecast-label {
+  font-size: 0.6rem;
+  font-style: italic;
+  color: var(--color-text-secondary);
+  opacity: 0.85;
+}
+
 .history-day-value {
   font-size: 0.9rem;
   font-weight: 700;

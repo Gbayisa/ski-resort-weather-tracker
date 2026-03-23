@@ -171,6 +171,7 @@ describe('Resort data shape for new features', () => {
     forecastDate: '2026-01-15',
     daySnowfall: 8.5,
     daySnowfallMid: 9.2,
+    freshSnow: 5.5,
     dayPrecipitation: 2.3,
     elevations: { base: 2475, mid: 3001, peak: 3527 },
     hourlyTimeline: [
@@ -189,9 +190,9 @@ describe('Resort data shape for new features', () => {
       },
     ],
     history: [
-      { date: '2026-01-12', snowfall: 3.0 },
-      { date: '2026-01-13', snowfall: 5.0 },
-      { date: '2026-01-14', snowfall: 2.0 },
+      { date: '2026-01-13', snowfall: 3.0, snowfallMid: 3.0 },
+      { date: '2026-01-14', snowfall: 5.0, snowfallMid: 5.0 },
+      { date: '2026-01-15', snowfall: 9.2, snowfallMid: 9.2, isForecast: true },
     ],
   };
 
@@ -206,6 +207,11 @@ describe('Resort data shape for new features', () => {
   it('has daySnowfallMid (altitude-adjusted projected snowfall) data', () => {
     expect(mockResort.daySnowfallMid).toBeDefined();
     expect(typeof mockResort.daySnowfallMid).toBe('number');
+  });
+
+  it('has freshSnow (sum of last 2 days mid-altitude snowfall) data', () => {
+    expect(mockResort.freshSnow).toBeDefined();
+    expect(typeof mockResort.freshSnow).toBe('number');
   });
 
   it('has hourly timeline entries with altitude-specific temperatures', () => {
@@ -233,5 +239,15 @@ describe('Resort data shape for new features', () => {
     const entry = mockResort.hourlyTimeline[0];
     expect(entry.snowfall).toBeDefined();
     expect(entry.precipitation).toBeDefined();
+  });
+
+  it('history contains 2 past days plus today marked as forecast', () => {
+    expect(mockResort.history).toHaveLength(3);
+    const today = mockResort.history[2];
+    expect(today.date).toBe('2026-01-15');
+    expect(today.isForecast).toBe(true);
+    // Past days should not have isForecast
+    expect(mockResort.history[0].isForecast).toBeFalsy();
+    expect(mockResort.history[1].isForecast).toBeFalsy();
   });
 });
