@@ -31,6 +31,8 @@ export function initDb() {
       region TEXT,
       website TEXT,
       osm_id TEXT UNIQUE,
+      elevation_base INTEGER DEFAULT 0,
+      elevation_peak INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
