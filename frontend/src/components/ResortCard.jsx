@@ -18,8 +18,8 @@ export default function ResortCard({ resort, date }) {
   const avgFreezingLevel = getAvgFreezingLevel(timeline);
   const avgVisibility = getAvgVisibility(timeline);
 
-  // Rolling 24h snowfall badge — prefer altitude-specific value at mid
-  const snowfall24h = resort.snowfall24h ?? resort.daySnowfall ?? 0;
+  // Today's projected snowfall at mid altitude (all 24h of the forecast date, observed + forecast)
+  const daySnowfallMid = resort.daySnowfallMid ?? resort.daySnowfall ?? 0;
 
   return (
     <div className="resort-card">
@@ -36,10 +36,7 @@ export default function ResortCard({ resort, date }) {
         </div>
         <div className="resort-badges">
           <span className="resort-distance">📏 {resort.distance} km</span>
-          <span className="resort-snowfall-badge">❄️ {snowfall24h} cm</span>
-          {resort.dayPrecipitation > 0 && (
-            <span className="resort-precip-badge">🌧️ {resort.dayPrecipitation} mm</span>
-          )}
+          <span className="resort-snowfall-badge">❄️ {daySnowfallMid} cm</span>
         </div>
       </div>
 
@@ -78,10 +75,6 @@ export default function ResortCard({ resort, date }) {
         <div className="summary-stat">
           <span className="summary-label">🧊 Freezing Level</span>
           <span className="summary-value">{avgFreezingLevel !== null ? `${avgFreezingLevel}m` : '—'}</span>
-        </div>
-        <div className="summary-stat">
-          <span className="summary-label">🌧️ Precipitation</span>
-          <span className="summary-value">{resort.dayPrecipitation ?? 0} mm</span>
         </div>
         <div className="summary-stat">
           <span className="summary-label">👁️ Visibility</span>

@@ -49,18 +49,26 @@ export function adjustTemperatureForElevation(baseTemp, baseElevation, targetEle
 const SNOW_THRESHOLD_TEMP_C = 1.0;
 
 /**
- * Open-Meteo conversion factor: divide snowfall cm by this to get liquid-equivalent mm.
- * Equivalently, multiply precipitation mm by this to estimate snowfall cm.
- * Source: Open-Meteo docs — "For the water equivalent in millimeter, divide by 7."
+ * Open-Meteo calibration: their snowfall output (cm) divided by 7 gives liquid-equivalent mm.
+ * This factor describes the density of snow in their model and is NOT used for converting
+ * rain to snow at altitude (which uses a separate, physically-derived ratio below).
  */
-const PRECIP_TO_SNOW_FACTOR = 7;
+const PRECIP_TO_SNOW_FACTOR = 7; // kept for reference / Open-Meteo output interpretation
+
+/**
+ * Standard snow-to-liquid ratio used when estimating snowfall from precipitation at
+ * a higher, colder altitude where the model reports rain at the grid-cell level.
+ * Based on the widely-used 10:1 depth ratio (10 cm snow ≈ 1 cm = 10 mm liquid).
+ * i.e. 1 mm liquid precipitation ≈ 1 cm of new snow.
+ */
+const ALT_PRECIP_TO_SNOW = 1;
 
 /**
  * Compute snowfall at a given altitude.
  * If temperature at that altitude is at/below the snow threshold (1°C),
  * precipitation falls as snow. If the API reports 0 snowfall (rain at base)
- * but the altitude is cold enough, convert precipitation to snowfall using
- * Open-Meteo's factor: 1 mm liquid ≈ 7 cm snow.
+ * but the altitude is cold enough, estimate snowfall from precipitation using
+ * the standard 10:1 snow:water depth ratio (1 mm liquid ≈ 1 cm snow).
  */
 function computeSnowfallAtAlt(snowfall, precipitation, tempAtAlt) {
   if (tempAtAlt === null || tempAtAlt === undefined) {
@@ -68,8 +76,8 @@ function computeSnowfallAtAlt(snowfall, precipitation, tempAtAlt) {
   }
   if (tempAtAlt <= SNOW_THRESHOLD_TEMP_C) {
     if (snowfall > 0) return Math.round(snowfall * 10) / 10;
-    // Base is raining but altitude is cold enough for snow
-    return Math.round(precipitation * PRECIP_TO_SNOW_FACTOR * 10) / 10;
+    // Base is raining but altitude is cold enough for snow — use standard 10:1 ratio
+    return Math.round(precipitation * ALT_PRECIP_TO_SNOW * 10) / 10;
   }
   // Above snow threshold — rain at this altitude
   return 0;
@@ -234,6 +242,30 @@ export function dayTotalPrecipitation(hourlyData, forecastDate) {
     }
   }
   return Math.round(total * 10) / 10;
+}
+
+/**
+ * Compute total altitude-adjusted snowfall at mid elevation for a given forecast date.
+ * Includes all 24 hours of the date (past hours = observed, future hours = projected),
+ * so this can be used to show today's projected total even mid-day.
+ */
+export function daySnowfallMidAlt(hourlyData, forecastDate, elevations, apiElevation) {
+  if (!hourlyData || !hourlyData.time) return 0;
+
+  const { base: baseElev = 0, mid: midElev = 0 } = elevations || {};
+  const _apiElevation = apiElevation ?? baseElev;
+
+  let snowMid = 0;
+  for (let i = 0; i < hourlyData.time.length; i++) {
+    if (!hourlyData.time[i].startsWith(forecastDate)) continue;
+    const sf = hourlyData.snowfall?.[i] ?? 0;
+    const precip = hourlyData.precipitation?.[i] ?? 0;
+    const temp2m = hourlyData.temperature_2m?.[i] ?? null;
+    const tempMid =
+      temp2m !== null ? adjustTemperatureForElevation(temp2m, _apiElevation, midElev) : null;
+    snowMid += computeSnowfallAtAlt(sf, precip, tempMid);
+  }
+  return Math.round(snowMid * 10) / 10;
 }
 
 /**

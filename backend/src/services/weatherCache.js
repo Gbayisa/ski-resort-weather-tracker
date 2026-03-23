@@ -6,7 +6,7 @@ import {
   dayTotalSnowfall,
   dayTotalPrecipitation,
   historicalSnowfall,
-  snowfallLast24Hours,
+  daySnowfallMidAlt,
 } from './forecastUtils.js';
 
 const CACHE_TTL_HOURS = 3;
@@ -31,17 +31,27 @@ export async function getWeatherForResort(resort, forecastDate) {
   if (cached) {
     const parsed = JSON.parse(cached.data);
     hourlyData = parsed.hourly;
+    // Restore the API elevation stored alongside the hourly data
+    if (parsed.apiElevation != null) {
+      hourlyData._apiElevation = parsed.apiElevation;
+    }
   } else {
     try {
       const weatherResp = await fetchWeatherData(resort.lat, resort.lon, forecastDate);
       hourlyData = weatherResp.hourly;
 
-      // Cache the result
+      // Cache the result — store the Open-Meteo grid-cell elevation alongside hourly data
       const expiresAt = new Date(Date.now() + CACHE_TTL_HOURS * 3600 * 1000).toISOString();
       db.prepare(
         `INSERT OR REPLACE INTO weather_cache (resort_id, forecast_date, data, fetched_at, expires_at)
          VALUES (?, ?, ?, ?, ?)`
-      ).run(resort.id, forecastDate, JSON.stringify(weatherResp), now, expiresAt);
+      ).run(
+        resort.id,
+        forecastDate,
+        JSON.stringify({ hourly: weatherResp.hourly, apiElevation: weatherResp.elevation }),
+        now,
+        expiresAt,
+      );
     } catch (err) {
       console.error(`Failed to fetch weather for ${resort.name}:`, err.message);
       return null;
@@ -54,20 +64,24 @@ export async function getWeatherForResort(resort, forecastDate) {
 
   const elevations = { base: elevBase, mid: elevMid, peak: elevPeak };
 
-  // Store the API elevation (Open-Meteo grid-cell) so lapse-rate calcs can use it
+  // Use the Open-Meteo grid-cell elevation (stored on hourlyData) for accurate lapse-rate
+  // calculations; fall back to resort base elevation if not available.
+  const apiElev = hourlyData?._apiElevation ?? elevBase;
+
+  // Ensure the _apiElevation field is set for parseHourlyTimeline (reads it from the object)
   if (hourlyData) {
-    hourlyData._apiElevation = elevBase; // approximate: resort lat/lon is near base
+    hourlyData._apiElevation = apiElev;
   }
 
   const { morning, afternoon } = parseForecastBlocks(hourlyData, forecastDate);
   const hourlyTimeline = parseHourlyTimeline(hourlyData, forecastDate, elevations);
   const daySnowfall = dayTotalSnowfall(hourlyData, forecastDate);
   const dayPrecipitation = dayTotalPrecipitation(hourlyData, forecastDate);
-  const history = historicalSnowfall(hourlyData, forecastDate, 3, elevations, elevBase);
+  const history = historicalSnowfall(hourlyData, forecastDate, 3, elevations, apiElev);
 
-  // Rolling 24h snowfall at mid altitude — used for the badge and minSnowfall filter
-  const snowfall24hData = snowfallLast24Hours(hourlyData, new Date().toISOString(), elevations, elevBase);
-  const snowfall24h = snowfall24hData.mid;
+  // Total altitude-adjusted projected snowfall for the forecast date at mid altitude.
+  // Covers all 24 hours (observed + forecast) so it shows today's projected total.
+  const daySnowfallMid = daySnowfallMidAlt(hourlyData, forecastDate, elevations, apiElev);
 
   return {
     morning,
@@ -75,7 +89,7 @@ export async function getWeatherForResort(resort, forecastDate) {
     hourlyTimeline,
     daySnowfall,
     dayPrecipitation,
-    snowfall24h,
+    daySnowfallMid,
     history,
     elevations: {
       base: elevBase,

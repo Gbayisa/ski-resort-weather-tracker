@@ -10,6 +10,7 @@ import {
   dayTotalPrecipitation,
   historicalSnowfall,
   snowfallLast24Hours,
+  daySnowfallMidAlt,
 } from '../services/forecastUtils.js';
 
 // ---------------------------------------------------------------------------
@@ -301,8 +302,8 @@ describe('parseHourlyTimeline', () => {
     expect(entry.snowfall.base).toBe(0);
     // Mid (3000m, +500m): 5 - 3.25 = 1.75°C → above 1°C → rain, snowfall = 0
     expect(entry.snowfall.mid).toBe(0);
-    // Peak (3500m, +1000m): 5 - 6.5 = -1.5°C → snow, 1mm × 7 = 7cm
-    expect(entry.snowfall.peak).toBe(7.0);
+    // Peak (3500m, +1000m): 5 - 6.5 = -1.5°C → snow, 1mm × 1 = 1cm (standard 10:1 ratio)
+    expect(entry.snowfall.peak).toBe(1.0);
   });
 });
 
@@ -403,8 +404,57 @@ describe('historicalSnowfall', () => {
 });
 
 // ---------------------------------------------------------------------------
-// snowfallLast24Hours
+// daySnowfallMidAlt
 // ---------------------------------------------------------------------------
+describe('daySnowfallMidAlt', () => {
+  it('returns 0 for null data', () => {
+    expect(daySnowfallMidAlt(null, '2026-01-15', {}, 0)).toBe(0);
+  });
+
+  it('sums mid-altitude snowfall for the specified date only', () => {
+    const snowfallArr = new Array(24).fill(0);
+    snowfallArr[8] = 1.0;
+    snowfallArr[14] = 2.0;
+
+    // Temperature well below freezing → snowfall used directly
+    const hourlyData = makeHourlyData('2026-01-15', { snowfall: snowfallArr });
+    const result = daySnowfallMidAlt(hourlyData, '2026-01-15', { base: 1000, mid: 1500, peak: 2000 }, 1000);
+    expect(result).toBe(3.0);
+  });
+
+  it('converts precipitation to snow at mid when cold enough (1mm → 1cm)', () => {
+    // No snowfall at grid level, but 2mm rain and cold mid-altitude temperature
+    const hourlyData = makeHourlyData('2026-01-15', {
+      snowfall: new Array(24).fill(0),
+      precipitation: new Array(24).fill(2.0), // 2mm/hr rain at base
+      temperature_2m: new Array(24).fill(8),  // 8°C at API elevation (1000m)
+      _apiElevation: 1000,
+    });
+    // At mid (2500m, +1500m): 8 - (1500/1000 * 6.5) = 8 - 9.75 = -1.75°C → snow
+    // Each hour: 2mm × 1 = 2cm; 24 hours × 2cm = 48cm total
+    const result = daySnowfallMidAlt(hourlyData, '2026-01-15', { base: 1000, mid: 2500, peak: 3000 }, 1000);
+    expect(result).toBe(48.0);
+  });
+
+  it('returns 0 when no data matches the date', () => {
+    const hourlyData = makeHourlyData('2026-01-14');
+    expect(daySnowfallMidAlt(hourlyData, '2026-01-15', { base: 1000, mid: 1500, peak: 2000 }, 1000)).toBe(0);
+  });
+
+  it('includes future forecast hours (projections) in the total', () => {
+    // Simulate a day where morning has 0 snowfall but afternoon is forecast with 1cm/hr
+    const snowfallArr = new Array(24).fill(0);
+    // Future hours (12–17) have projected snowfall
+    for (let h = 12; h <= 17; h++) snowfallArr[h] = 1.0;
+
+    const hourlyData = makeHourlyData('2026-01-15', { snowfall: snowfallArr });
+    const result = daySnowfallMidAlt(hourlyData, '2026-01-15', { base: 1000, mid: 1500, peak: 2000 }, 1000);
+    // 6 hours × 1cm = 6cm total projected (morning 0cm + afternoon 6cm)
+    expect(result).toBe(6.0);
+  });
+});
+
+
 describe('snowfallLast24Hours', () => {
   it('returns zeros for null data', () => {
     const result = snowfallLast24Hours(null, '2026-01-15T12:00:00Z', {}, 0);
@@ -457,7 +507,7 @@ describe('snowfallLast24Hours', () => {
     hourlyData._apiElevation = 1000;
 
     // At peak (3000m): temp = 5 - (2000/1000 * 6.5) = 5 - 13 = -8°C → snowing
-    // snowfallAtPeak = 1mm * 7 = 7cm
+    // snowfallAtPeak = 1mm × 1 = 1cm (standard 10:1 ratio)
     const result = snowfallLast24Hours(
       hourlyData,
       '2026-01-15T12:00:00Z',
@@ -466,6 +516,6 @@ describe('snowfallLast24Hours', () => {
     );
 
     expect(result.base).toBe(0);   // raining at base
-    expect(result.peak).toBe(7.0); // snowing at peak: 1mm × 7 = 7cm
+    expect(result.peak).toBe(1.0); // snowing at peak: 1mm × 1 = 1cm
   });
 });
