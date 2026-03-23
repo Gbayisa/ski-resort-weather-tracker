@@ -7,6 +7,7 @@ import {
   dayTotalPrecipitation,
   historicalSnowfall,
   daySnowfallMidAlt,
+  freshSnowfall,
 } from './forecastUtils.js';
 
 const CACHE_TTL_HOURS = 3;
@@ -77,11 +78,23 @@ export async function getWeatherForResort(resort, forecastDate) {
   const hourlyTimeline = parseHourlyTimeline(hourlyData, forecastDate, elevations);
   const daySnowfall = dayTotalSnowfall(hourlyData, forecastDate);
   const dayPrecipitation = dayTotalPrecipitation(hourlyData, forecastDate);
-  const history = historicalSnowfall(hourlyData, forecastDate, 3, elevations, apiElev);
 
   // Total altitude-adjusted projected snowfall for the forecast date at mid altitude.
   // Covers all 24 hours (observed + forecast) so it shows today's projected total.
   const daySnowfallMid = daySnowfallMidAlt(hourlyData, forecastDate, elevations, apiElev);
+
+  // Last 2 past days of actual snowfall, then append today's projected snowfall as the
+  // final entry so the history section always ends with the current day's forecast.
+  const history = historicalSnowfall(hourlyData, forecastDate, 2, elevations, apiElev);
+  history.push({
+    date: forecastDate,
+    snowfall: daySnowfall,
+    snowfallMid: daySnowfallMid,
+    isForecast: true,
+  });
+
+  // Fresh snow = sum of the last 2 days of actual mid-altitude snowfall (48 h window).
+  const freshSnow = freshSnowfall(hourlyData, forecastDate, elevations, apiElev);
 
   return {
     morning,
@@ -90,6 +103,7 @@ export async function getWeatherForResort(resort, forecastDate) {
     daySnowfall,
     dayPrecipitation,
     daySnowfallMid,
+    freshSnow,
     history,
     elevations: {
       base: elevBase,

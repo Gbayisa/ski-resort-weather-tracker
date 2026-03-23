@@ -21,6 +21,9 @@ export default function ResortCard({ resort, date }) {
   // Today's projected snowfall at mid altitude (all 24h of the forecast date, observed + forecast)
   const daySnowfallMid = resort.daySnowfallMid ?? resort.daySnowfall ?? 0;
 
+  // Fresh snow = sum of last 2 days of actual snowfall at mid altitude (48-hour window)
+  const freshSnow = resort.freshSnow ?? 0;
+
   return (
     <div className="resort-card">
       <div className="resort-card-header">
@@ -36,7 +39,7 @@ export default function ResortCard({ resort, date }) {
         </div>
         <div className="resort-badges">
           <span className="resort-distance">📏 {resort.distance} km</span>
-          <span className="resort-snowfall-badge">❄️ {daySnowfallMid} cm</span>
+          <span className="resort-snowfall-badge">❄️ {freshSnow} cm</span>
         </div>
       </div>
 
@@ -97,12 +100,13 @@ export default function ResortCard({ resort, date }) {
       {/* History */}
       {resort.history && resort.history.length > 0 && (
         <div className="history-section">
-          <div className="history-title">❄️ Snowfall — Last 3 Days</div>
+          <div className="history-title">❄️ Snowfall — Recent Days</div>
           <div className="history-days">
             {resort.history.map((day) => (
               <div key={day.date} className="history-day">
                 <div className="history-day-date">
                   {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {day.isForecast && <span className="forecast-label"> (forecast)</span>}
                 </div>
                 <div className="history-day-value">{day.snowfallMid ?? day.snowfall} cm</div>
               </div>

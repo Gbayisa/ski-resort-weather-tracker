@@ -11,6 +11,7 @@ import {
   historicalSnowfall,
   snowfallLast24Hours,
   daySnowfallMidAlt,
+  freshSnowfall,
 } from '../services/forecastUtils.js';
 
 // ---------------------------------------------------------------------------
@@ -517,5 +518,81 @@ describe('snowfallLast24Hours', () => {
 
     expect(result.base).toBe(0);   // raining at base
     expect(result.peak).toBe(1.0); // snowing at peak: 1mm × 1 = 1cm
+  });
+});
+
+// ---------------------------------------------------------------------------
+// freshSnowfall
+// ---------------------------------------------------------------------------
+describe('freshSnowfall', () => {
+  it('returns 0 for null data', () => {
+    expect(freshSnowfall(null, '2026-01-15', {}, 0)).toBe(0);
+  });
+
+  it('sums mid-altitude snowfall for the two days before the forecast date', () => {
+    const times = [];
+    const snowfall = [];
+    const temperature_2m = [];
+    // Build 4 days of data: Jan 12-15 (forecastDate = Jan 15)
+    for (let d = 12; d <= 15; d++) {
+      for (let h = 0; h < 24; h++) {
+        const hh = String(h).padStart(2, '0');
+        times.push(`2026-01-${d}T${hh}:00`);
+        // Jan 13: 1 cm/h, Jan 14: 2 cm/h, others 0
+        snowfall.push(d === 13 ? 1.0 : d === 14 ? 2.0 : 0);
+        temperature_2m.push(-5); // well below freezing
+      }
+    }
+
+    const hourlyData = { time: times, snowfall, temperature_2m };
+    // Last 2 days before Jan 15 = Jan 13 (24 cm) + Jan 14 (48 cm) = 72 cm
+    const result = freshSnowfall(
+      hourlyData,
+      '2026-01-15',
+      { base: 1000, mid: 2000, peak: 3000 },
+      1000,
+    );
+    expect(result).toBe(72);
+  });
+
+  it('returns 0 when there is no snowfall in the last 2 days', () => {
+    const times = [];
+    const snowfall = [];
+    for (let d = 12; d <= 15; d++) {
+      for (let h = 0; h < 24; h++) {
+        const hh = String(h).padStart(2, '0');
+        times.push(`2026-01-${d}T${hh}:00`);
+        snowfall.push(0);
+      }
+    }
+    const hourlyData = { time: times, snowfall };
+    expect(freshSnowfall(hourlyData, '2026-01-15', { base: 1000, mid: 2000, peak: 3000 }, 1000)).toBe(0);
+  });
+
+  it('does not include the forecast date itself or days older than 2 days', () => {
+    const times = [];
+    const snowfall = [];
+    const temperature_2m = [];
+    // Jan 12 (3 days before): 5 cm/h — should NOT be included
+    // Jan 13 (2 days before): 1 cm/h — should be included
+    // Jan 14 (1 day before):  2 cm/h — should be included
+    // Jan 15 (forecast date): 3 cm/h — should NOT be included
+    for (let d = 12; d <= 15; d++) {
+      for (let h = 0; h < 24; h++) {
+        const hh = String(h).padStart(2, '0');
+        times.push(`2026-01-${d}T${hh}:00`);
+        snowfall.push(d === 12 ? 5.0 : d === 13 ? 1.0 : d === 14 ? 2.0 : 3.0);
+        temperature_2m.push(-5);
+      }
+    }
+    const hourlyData = { time: times, snowfall, temperature_2m };
+    // Expected: Jan 13 (24 cm) + Jan 14 (48 cm) = 72 cm
+    const result = freshSnowfall(
+      hourlyData,
+      '2026-01-15',
+      { base: 1000, mid: 2000, peak: 3000 },
+      1000,
+    );
+    expect(result).toBe(72);
   });
 });
