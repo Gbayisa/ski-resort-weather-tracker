@@ -15,3 +15,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # ── Google AdSense (optional) ──────────────────────────────────────────
+      # Set all three to enable live ads; leave blank to show placeholders.
+      # These are compiled into the frontend bundle at build time.
+      # See frontend/.env.example for full setup instructions.
+      - key: VITE_ADSENSE_CLIENT
+        sync: false
+      - key: VITE_ADSENSE_SLOT_TOP
+        sync: false
+      - key: VITE_ADSENSE_SLOT_BOTTOM
+        sync: false

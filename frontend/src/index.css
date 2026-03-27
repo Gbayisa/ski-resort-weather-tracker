@@ -748,6 +748,14 @@ body {
   margin: 1.5rem 0;
 }
 
+.ad-slot--live {
+  background: transparent;
+  border: none;
+  padding: 0;
+  /* Prevent layout shift while the ad loads */
+  min-height: 90px;
+}
+
 .ad-slot-label {
   font-weight: 600;
   text-transform: uppercase;
