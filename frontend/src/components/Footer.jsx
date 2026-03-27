@@ -4,7 +4,7 @@ export default function Footer() {
       <div className="footer-links">
         <span>🏔️ Ski Resort Weather Tracker</span>
         <span>|</span>
-        <span>Built for local testing</span>
+        <a href="/privacy-policy.html">Privacy Policy</a>
       </div>
 
       <div className="attribution">

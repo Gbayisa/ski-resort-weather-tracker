@@ -17,7 +17,7 @@ A local MVP website that helps users find ski resorts near them with the best sn
 - **Live weather data** from [Open-Meteo](https://open-meteo.com/)
 - **294 ski resorts** seeded from OpenStreetMap-derived data (worldwide, 39 countries)
 - **Background jobs** for cache warming and cleanup
-- **Placeholder ad slots** (AdSense-ready)
+- **Google AdSense ad slots** — live ads when env vars are configured; placeholder boxes in development
 - **Mobile responsive** design
 - **OSM and Open-Meteo attribution** in footer
 
@@ -148,6 +148,9 @@ When the frontend is deployed as a **static site** (e.g. on Render), the Vite pr
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `VITE_API_BASE_URL` | Full URL of the backend API including `/api` | `https://ski-resort-api.onrender.com/api` |
+| `VITE_ADSENSE_CLIENT` | Google AdSense publisher ID | `ca-pub-1234567890123456` |
+| `VITE_ADSENSE_SLOT_TOP` | Ad-unit slot ID for leaderboard (above results) | `9876543210` |
+| `VITE_ADSENSE_SLOT_BOTTOM` | Ad-unit slot ID for banner (below results) | `0123456789` |
 
 See `frontend/.env.example` for reference.
 
@@ -193,16 +196,108 @@ The MVP uses a seeded database of 294 resorts across 39 countries. The resort da
 
 ## Production Notes
 
-### AdSense Integration
+### AdSense Integration — Complete Setup Guide
 
-Ad placeholder slots are already in the layout. To activate:
+The AdSense code is already wired into the layout. Follow the steps below to
+go from zero to live ads.
 
-1. Sign up for [Google AdSense](https://www.google.com/adsense/)
-2. Replace `<AdSlot />` placeholder content with your AdSense `<ins>` tags
-3. Add the AdSense script to `index.html`:
-   ```html
-   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXX" crossorigin="anonymous"></script>
-   ```
+#### Step 1 — Apply for a Google AdSense account
+
+1. Go to [https://adsense.google.com/](https://adsense.google.com/) and sign in
+   with a Google account.
+2. Enter your **website URL** (your Render deployment URL, e.g.
+   `https://ski-resort-weather-tracker.onrender.com`).
+3. Google reviews the site for policy compliance before granting access.
+   This review usually takes **1–2 weeks** for new sites.
+
+> **Before applying**, make sure your site already has content (real search
+> results loading) and a visible **Privacy Policy** page — both are checked
+> during the review. The privacy policy is already generated at
+> `/privacy-policy.html` and linked in the footer.
+
+#### Step 2 — Update ads.txt with your publisher ID
+
+Once your account is approved, Google shows your publisher ID in the form
+`ca-pub-XXXXXXXXXXXXXXXX`.
+
+Edit `frontend/public/ads.txt` and replace the placeholder:
+
+```
+# Before
+google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
+
+# After (example)
+google.com, pub-1234567890123456, DIRECT, f08c47fec0942fa0
+```
+
+The `f08c47fec0942fa0` TAG ID is Google's fixed value — do not change it.
+
+After editing, commit and redeploy so the file is served at
+`https://<your-domain>/ads.txt`. Google verifies this file automatically.
+
+#### Step 3 — Create two ad units in AdSense
+
+In the AdSense dashboard go to **Ads → By ad unit → Display ads** and create:
+
+| Unit name | Format | Notes |
+|-----------|--------|-------|
+| Leaderboard (top) | Responsive / Auto | Shown above results |
+| Bottom Banner | Responsive / Auto | Shown below results |
+
+Note the **Slot ID** (a 10-digit number) for each unit.
+
+#### Step 4 — Set environment variables on Render
+
+In the Render dashboard open your service → **Environment** and add:
+
+| Key | Value |
+|-----|-------|
+| `VITE_ADSENSE_CLIENT` | `ca-pub-XXXXXXXXXXXXXXXX` (your publisher ID) |
+| `VITE_ADSENSE_SLOT_TOP` | Slot ID of the leaderboard unit |
+| `VITE_ADSENSE_SLOT_BOTTOM` | Slot ID of the bottom-banner unit |
+
+These are **build-time** variables compiled into the JavaScript bundle by Vite.
+After setting them you must trigger a **Manual Deploy** in Render before they
+take effect.
+
+When all three variables are set, the `AdSlot` components switch from
+placeholder boxes to real `<ins class="adsbygoogle">` elements and the AdSense
+script is loaded automatically.
+
+#### Step 5 — Purchase an Open-Meteo commercial licence
+
+Sites with advertising are considered **commercial use** under Open-Meteo's
+terms of service. You must purchase a licence before launching with ads:
+[https://open-meteo.com/en/pricing](https://open-meteo.com/en/pricing)
+
+#### Step 6 — EU / EEA / UK / Switzerland consent (GDPR)
+
+If your site serves visitors in these regions you must integrate a
+**Google-certified Consent Management Platform (CMP)** before personalised ads
+are loaded.
+
+Recommended options:
+- [Quantcast Choice](https://www.quantcast.com/products/choice-consent-management-platform/)
+  (free, Google-certified)
+- [Cookiebot](https://www.cookiebot.com/) (paid, widely used)
+
+See Google's guide:
+[https://support.google.com/adsense/answer/13554116](https://support.google.com/adsense/answer/13554116)
+
+The CMP script should be added to `frontend/index.html` **before** the Vite
+entry point so consent is gathered before any ad code executes.
+
+#### Quick-reference checklist
+
+- [ ] AdSense account approved for your domain
+- [ ] `frontend/public/ads.txt` updated with real publisher ID and deployed
+- [ ] Two ad units created; slot IDs noted
+- [ ] `VITE_ADSENSE_CLIENT`, `VITE_ADSENSE_SLOT_TOP`, `VITE_ADSENSE_SLOT_BOTTOM`
+      set in Render environment; Manual Deploy triggered
+- [ ] Open-Meteo commercial licence purchased
+- [ ] CMP integrated (if serving EU/EEA/UK/CH traffic)
+
+---
 
 ### EU Consent (CMP)
 
