@@ -36,14 +36,14 @@ export function initDb() {
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE TABLE IF NOT EXISTS weather_cache (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      resort_id INTEGER NOT NULL,
-      forecast_date TEXT NOT NULL,
+    -- Superseded by resort_forecasts: one cached forecast per resort covers every date
+    DROP TABLE IF EXISTS weather_cache;
+
+    CREATE TABLE IF NOT EXISTS resort_forecasts (
+      resort_id INTEGER PRIMARY KEY,
       data TEXT NOT NULL,
-      fetched_at TEXT DEFAULT (datetime('now')),
+      fetched_at TEXT NOT NULL,
       expires_at TEXT NOT NULL,
-      UNIQUE(resort_id, forecast_date),
       FOREIGN KEY (resort_id) REFERENCES resorts(id)
     );
 
@@ -61,8 +61,7 @@ export function initDb() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_resorts_lat_lon ON resorts(lat, lon);
-    CREATE INDEX IF NOT EXISTS idx_weather_cache_resort_date ON weather_cache(resort_id, forecast_date);
-    CREATE INDEX IF NOT EXISTS idx_weather_cache_expires ON weather_cache(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_resort_forecasts_expires ON resort_forecasts(expires_at);
     CREATE INDEX IF NOT EXISTS idx_route_cache_origin ON route_cache(origin_key, resort_id);
     CREATE INDEX IF NOT EXISTS idx_route_cache_expires ON route_cache(expires_at);
   `);

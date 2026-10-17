@@ -1,6 +1,6 @@
 import { getDb } from '../db/database.js';
 import { haversineDistance } from './forecastUtils.js';
-import { getWeatherForResort } from './weatherCache.js';
+import { getWeatherForResort, ensureForecasts } from './weatherCache.js';
 import { getDriveInfoBatch, buildGoogleMapsUrl } from './driveTime.js';
 
 /**
@@ -36,7 +36,8 @@ export async function getRecommendations({ lat, lon, date, radiusKm = 200, minSn
   // Limit to top 50 to avoid excessive API calls
   const topCandidates = inRadius.slice(0, 50);
 
-  // Fetch weather for each and filter by snowfall
+  // Fetch any uncached forecasts in one batched request, then filter by snowfall
+  await ensureForecasts(topCandidates);
   const results = [];
   for (const resort of topCandidates) {
     const weather = await getWeatherForResort(resort, date);
