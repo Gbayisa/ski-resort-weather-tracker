@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 import { SEED_RESORTS } from './seedResorts.js';
 import { RESORT_STATS } from '../data/resortStats.js';
 import { haversineDistance } from '../services/forecastUtils.js';
+import { cleanAreaName } from '../data/names.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(__dirname, '..', 'data', 'skiAreas.json');
@@ -172,7 +173,7 @@ async function main() {
     const runs = p.statistics?.runs || {};
     return {
       id: p.id,
-      name: p.name.trim(),
+      name: cleanAreaName(p.name),
       lat,
       lon,
       country: p.places?.[0]?.iso3166_1Alpha2 || null,

@@ -212,7 +212,7 @@ export function coverLabel(depthMid, glacier) {
 }
 
 /** Short badges shown on cards. */
-export function tagsFor(c, { glacier = false } = {}) {
+export function tagsFor(c) {
   const tags = [];
   if (c.fresh24 >= 15) tags.push('powder');
   else if (c.fresh48 >= 5) tags.push('fresh');
@@ -223,7 +223,6 @@ export function tagsFor(c, { glacier = false } = {}) {
   if (c.tempMax !== null && c.tempMax <= -15) tags.push('cold');
   if (c.tempMax !== null && c.tempMax >= 3 && c.fresh48 < 5) tags.push('spring');
   if (c.depthMid < 15 && c.depthPeak >= 30) tags.push('upper-only');
-  if (glacier) tags.push('glacier');
   return tags;
 }
 
@@ -244,7 +243,7 @@ export function reasonsFor(c, resort, style, { glacier = false } = {}) {
     if (style === 'powder') r.push(`${resort.pct_advanced}% black & expert terrain`);
     else if (style === 'groomer')
       r.push(`${resort.pct_easy + resort.pct_intermediate}% ${naColors ? 'green & blue' : 'blue & red'} runs`);
-    else if (resort.piste_km) r.push(`${resort.piste_km} km of pistes`);
+    else if (resort.piste_km >= 100) r.push(`Big area — ${resort.piste_km} km of pistes`);
   };
 
   if (style === 'powder') {

@@ -346,7 +346,7 @@ function OnMountain({ me, setMe, toast }) {
             value={note}
             maxLength={80}
             onChange={(e) => onNote(e.target.value)}
-            placeholder="Where to find you (e.g. top of gondola)"
+            placeholder="Where to find you (optional)"
             aria-label="Where to find you"
           />
         </label>

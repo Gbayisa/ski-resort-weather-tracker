@@ -42,24 +42,30 @@ export default function ResortDetails({ resortId, date, elevations }) {
     );
 
   const hours = (state.data.hourlyTimeline || []).filter((h) => h.hour >= 8 && h.hour <= 17);
+  // Unmapped areas have one known elevation, so base/mid/peak would all read the same
+  const singleElevation = !elevations || elevations.base === elevations.peak;
 
   return (
     <div className="details">
       <div className="details-head">
         <strong>{formatDate(date)}</strong>
-        <div className="segmented segmented-sm" role="radiogroup" aria-label="Altitude">
-          {ALTITUDES.map((a) => (
-            <button
-              key={a.key}
-              role="radio"
-              aria-checked={altitude === a.key}
-              className={altitude === a.key ? 'is-active' : ''}
-              onClick={() => setAltitude(a.key)}
-            >
-              {a.label} <small>{elevations?.[a.key]} m</small>
-            </button>
-          ))}
-        </div>
+        {singleElevation ? (
+          <span className="muted">{elevations?.base} m</span>
+        ) : (
+          <div className="segmented segmented-sm" role="radiogroup" aria-label="Altitude">
+            {ALTITUDES.map((a) => (
+              <button
+                key={a.key}
+                role="radio"
+                aria-checked={altitude === a.key}
+                className={altitude === a.key ? 'is-active' : ''}
+                onClick={() => setAltitude(a.key)}
+              >
+                {a.label} <small>{elevations?.[a.key]} m</small>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="hours" role="list">
         {hours.map((h) => {

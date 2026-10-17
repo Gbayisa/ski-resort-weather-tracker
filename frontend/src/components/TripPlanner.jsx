@@ -9,9 +9,9 @@ export const TRIPS = [
 ];
 
 export const DRIVES = [
-  { key: 'short', title: 'Short drive', sub: 'Up to 1h 30', icon: Car },
-  { key: 'happy', title: 'Happy to drive for better', sub: 'Up to 2h 30', icon: Route },
-  { key: 'best', title: 'I want the best', sub: 'Up to 4h', icon: Trophy },
+  { key: 'short', title: 'Short drive', sub: 'Up to 1h 30', range: 'within 1h 30', icon: Car },
+  { key: 'happy', title: 'Happy to drive for better', sub: 'Up to 2h 30', range: 'within 2h 30', icon: Route },
+  { key: 'best', title: 'I want the best', sub: 'Up to 4h', range: 'within 4h', icon: Trophy },
 ];
 
 export const STYLES = [

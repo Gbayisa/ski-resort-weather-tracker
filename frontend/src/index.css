@@ -331,6 +331,10 @@ button {
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   border-top: 1px solid var(--border);
+  transition: transform 0.2s ease;
+}
+.bottomnav.is-hidden {
+  transform: translateY(110%);
 }
 .bottomnav a {
   display: flex;
@@ -424,9 +428,10 @@ button {
 }
 .hero-scrim {
   position: absolute;
-  inset: 0;
+  /* Overlaps the video edge and goes fully opaque before it, so no bright pixel row bleeds through */
+  inset: -1px;
   background:
-    linear-gradient(180deg, rgba(5, 10, 20, 0.55) 0%, rgba(5, 10, 20, 0.12) 30%, rgba(5, 10, 20, 0.6) 64%, var(--bg) 100%),
+    linear-gradient(180deg, rgba(5, 10, 20, 0.55) 0%, rgba(5, 10, 20, 0.12) 30%, rgba(5, 10, 20, 0.6) 64%, var(--bg) 96%),
     radial-gradient(ellipse 60% 50% at 15% 85%, rgba(56, 189, 248, 0.22), transparent 70%);
 }
 .hero-inner {
@@ -555,6 +560,9 @@ button {
 .segmented-sm button {
   padding: 6px 14px;
   font-size: 0.82rem;
+}
+.segmented button {
+  white-space: nowrap;
 }
 .segmented-sm small {
   font-weight: 500;
@@ -929,6 +937,7 @@ button {
 }
 .rc-title h3 {
   font-size: 1.4rem;
+  overflow-wrap: anywhere;
 }
 .is-featured .rc-title h3 {
   font-size: clamp(1.8rem, 4.4vw, 2.6rem);
@@ -1097,7 +1106,8 @@ button {
 .day-strip {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 1fr;
+  /* Compact tiles: a 2-day weekend shouldn't stretch across a wide card */
+  grid-auto-columns: minmax(0, 72px);
   gap: 6px;
 }
 .ds-day {
@@ -1379,11 +1389,12 @@ svg {
 }
 
 /* ---------- Sheets ---------- */
-/* The backdrop and sheet extend below the screen edge: when iOS Safari collapses its
-   toolbar (keyboard open), the page would otherwise show through under the sheet. */
 .sheet-backdrop {
   position: fixed;
-  inset: 0 0 -120px 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%; /* Sheet.jsx pins top/height to the visual viewport on iOS */
   z-index: 100;
   display: flex;
   align-items: flex-end;
@@ -1393,12 +1404,23 @@ svg {
   -webkit-backdrop-filter: blur(6px);
   animation: fade 0.2s ease both;
 }
+/* Sheet colour continues below the visible area, so nothing shows through between the
+   sheet and the keyboard bar while iOS settles the viewport */
+.sheet-backdrop::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 160px;
+  background: var(--bg-sheet);
+}
 .sheet {
   width: 100%;
-  max-height: 90vh;
+  max-height: calc(100% - 24px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 8px 20px calc(140px + env(safe-area-inset-bottom));
+  padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
   background: var(--bg-sheet);
   border: 1px solid var(--border);
   border-radius: 26px 26px 0 0;
@@ -1424,8 +1446,10 @@ svg {
 }
 @media (min-width: 760px) {
   .sheet-backdrop {
-    inset: 0;
     align-items: center;
+  }
+  .sheet-backdrop::after {
+    display: none;
   }
   .sheet {
     max-width: 520px;
@@ -1996,6 +2020,10 @@ svg {
 }
 
 /* Profile form */
+.profile {
+  max-width: 720px;
+  margin: 0 auto;
+}
 .profile-form {
   padding: 24px;
   display: flex;
@@ -2027,6 +2055,8 @@ svg {
 }
 .field input,
 .field textarea {
+  width: 100%;
+  min-width: 0; /* iOS gives inputs a wide intrinsic width that would overflow narrow columns */
   padding: 13px 14px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.06);
@@ -2212,6 +2242,13 @@ fieldset {
   }
   .rc-actions .btn-primary {
     flex: 1;
+  }
+  .details-head .segmented {
+    width: 100%;
+  }
+  .details-head .segmented button {
+    padding: 7px 4px;
+    font-size: 0.78rem;
   }
   .meet-status-head .btn {
     padding: 8px 12px;

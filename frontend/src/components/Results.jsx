@@ -26,7 +26,7 @@ export default function Results({ state, origin, trip, drive, style, dates, onSt
   const styleInfo = STYLES.find((s) => s.key === style);
   const [top, ...rest] = data.results;
   const maxFresh = Math.max(0, ...data.results.map((r) => r.snow.fresh24));
-  const range = data.widened ? 'within 4 h' : driveInfo.sub.toLowerCase();
+  const range = data.widened ? 'within 4h' : driveInfo.range;
 
   return (
     <section className={`results ${loading ? 'is-refreshing' : ''}`} aria-live="polite" aria-busy={loading}>
@@ -61,7 +61,7 @@ export default function Results({ state, origin, trip, drive, style, dates, onSt
       {data.widened && (
         <div className="banner banner-info">
           <Info size={18} />
-          <span>Nothing’s open {driveInfo.sub.toLowerCase()} from you yet — here’s the best within 4 hours.</span>
+          <span>Nothing’s open {driveInfo.range} of you yet — here’s the best within 4 hours.</span>
         </div>
       )}
 

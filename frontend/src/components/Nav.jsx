@@ -58,9 +58,34 @@ export function TopBar({ route, navigate, me, overHero }) {
   );
 }
 
+const TEXT_INPUT = /^(INPUT|TEXTAREA|SELECT)$/;
+const NON_TEXT_TYPES = new Set(['checkbox', 'radio', 'range', 'button', 'submit']);
+const isTyping = (el) => !!el && ((TEXT_INPUT.test(el.tagName) && !NON_TEXT_TYPES.has(el.type)) || el.isContentEditable);
+
+/**
+ * iOS keeps fixed bars glued to the layout viewport, so while the keyboard is
+ * open a bottom tab bar floats over the content; hide it while typing, like native apps.
+ */
+function useTyping() {
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const onFocusIn = (e) => setTyping(isTyping(e.target));
+    // Defer so moving between two fields doesn't flash the bar
+    const onFocusOut = () => setTimeout(() => setTyping(isTyping(document.activeElement)), 0);
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    return () => {
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
+    };
+  }, []);
+  return typing;
+}
+
 export function BottomNav({ route, me }) {
+  const typing = useTyping();
   return (
-    <nav className="bottomnav" aria-label="Main">
+    <nav className={`bottomnav ${typing ? 'is-hidden' : ''}`} aria-label="Main">
       {TABS.map(({ key, label, short, icon: Icon }) => (
         <a
           key={key}

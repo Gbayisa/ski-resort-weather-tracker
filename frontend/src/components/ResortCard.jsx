@@ -17,7 +17,7 @@ import ScoreRing from './ScoreRing.jsx';
 import TerrainBar from './TerrainBar.jsx';
 import ResortDetails from './ResortDetails.jsx';
 import { buildDirectionsUrl } from '../utils/maps.js';
-import { COVER, TAGS, flag, formatDate, formatDuration, formatTemp, scoreTone } from '../utils/format.js';
+import { COVER, TAGS, countryName, flag, formatDate, formatDuration, formatTemp, scoreTone } from '../utils/format.js';
 
 export default function ResortCard({ resort, origin, trip, featured = false, onMeet, index = 0 }) {
   const [open, setOpen] = useState(false);
@@ -41,7 +41,7 @@ export default function ResortCard({ resort, origin, trip, featured = false, onM
         <div className="rc-title">
           <h3>{resort.name}</h3>
           <p className="rc-meta">
-            <span aria-hidden="true">{flag(resort.country)}</span> {resort.region}
+            <span aria-hidden="true">{flag(resort.country)}</span> {resort.region || countryName(resort.country)}
             {resort.season.glacier && <span className="rc-meta-dot">Glacier</span>}
           </p>
         </div>
@@ -88,7 +88,13 @@ export default function ResortCard({ resort, origin, trip, featured = false, onM
           icon={Layers}
           label="Snow cover"
           value={snow.cover === 'glacier' ? 'Glacier' : `${snow.depthMid} cm`}
-          sub={COVER[snow.cover]}
+          sub={
+            snow.cover !== 'glacier'
+              ? COVER[snow.cover]
+              : snow.depthPeak >= 10
+                ? `~${snow.depthPeak} cm up top (est.)`
+                : 'Skiing on the glacier'
+          }
         />
         <Stat icon={Sun} label="Sunshine" value={`${weather.sunHours} h`} sub="of 8 ski hours" />
         <Stat

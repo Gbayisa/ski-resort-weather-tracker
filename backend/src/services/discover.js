@@ -190,7 +190,7 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
     score: e.conditionsScore,
     bestDate: e.bestDate,
     confidence: confidenceFor(dates, today),
-    tags: tagsFor(e.focus, e.season),
+    tags: tagsFor(e.focus),
     reasons: reasonsFor(e.focus, e.resort, style, e.season),
     snow: {
       fresh24: e.focus.fresh24,

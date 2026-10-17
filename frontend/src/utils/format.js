@@ -41,6 +41,14 @@ export function flag(countryCode) {
   return String.fromCodePoint(...[...countryCode].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
+export function countryName(code) {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code);
+  } catch {
+    return code;
+  }
+}
+
 export const formatTemp = (t) => (t === null || t === undefined ? '—' : `${Math.round(t)}°`);
 
 /** Words for a 0–100 score, so a number never stands alone. */
