@@ -1,315 +1,188 @@
 import { useState } from 'react';
+import {
+  Car,
+  Users,
+  Snowflake,
+  Layers,
+  Sun,
+  Thermometer,
+  Check,
+  Navigation,
+  ChevronDown,
+  ExternalLink,
+  Sparkles,
+} from 'lucide-react';
+import ScoreRing from './ScoreRing.jsx';
+import TerrainBar from './TerrainBar.jsx';
+import ResortDetails from './ResortDetails.jsx';
 import { buildDirectionsUrl } from '../utils/maps.js';
+import { COVER, TAGS, flag, formatDate, formatDuration, formatTemp, scoreTone } from '../utils/format.js';
 
-export default function ResortCard({ resort, origin, date }) {
-  const [altitude, setAltitude] = useState('mid');
+export default function ResortCard({ resort, origin, trip, featured = false, onMeet, index = 0 }) {
+  const [open, setOpen] = useState(false);
   const directionsUrl = buildDirectionsUrl(resort, origin);
-
-  const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
-
-  const elev = resort.elevations || { base: 0, mid: 0, peak: 0 };
-
-  // Get current altitude-specific data from the hourly timeline
-  const timeline = resort.hourlyTimeline || [];
-  const avgTemp = getAvgTemp(timeline, altitude);
-  const latestSnowDepth = getLatestSnowDepth(timeline, altitude);
-  const avgFreezingLevel = getAvgFreezingLevel(timeline);
-  const avgVisibility = getAvgVisibility(timeline);
-
-  // Today's projected snowfall at mid altitude (all 24h of the forecast date, observed + forecast)
-  const daySnowfallMid = resort.daySnowfallMid ?? resort.daySnowfall ?? 0;
-
-  // Fresh snow = sum of last 2 days of actual snowfall at mid altitude (48-hour window)
-  const freshSnow = resort.freshSnow ?? 0;
+  const { snow, weather, drive } = resort;
+  const multiDay = trip !== 'day' && resort.days.length > 1;
 
   return (
-    <div className="resort-card">
-      <div className="resort-card-header">
-        <div>
-          <div className="resort-name">{resort.name}</div>
-          <div className="resort-meta">
-            {resort.region && <span>📍 {resort.region}, {resort.country}</span>}
-            <span>📅 {formattedDate}</span>
-            <span className="resort-elevation-range">
-              ⛰️ {elev.base}m – {elev.peak}m
-            </span>
-          </div>
-        </div>
-        <div className="resort-badges">
-          {resort.driveTimeMin != null && (
-            <a
-              href={directionsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="resort-drive-badge"
-              title={driveTitle(resort)}
-              aria-label={`${formatDriveTime(resort.driveTimeMin, resort.driveSource)} drive — open directions to ${resort.name} in Google Maps`}
-            >
-              🚗 {formatDriveTime(resort.driveTimeMin, resort.driveSource)}
-            </a>
-          )}
-          <span className="resort-distance" title="Road distance (straight line in parentheses)">
-            🛣️ {resort.driveDistanceKm ?? resort.distance} km
-            {resort.driveDistanceKm != null && <span className="crow-distance"> ({resort.distance} direct)</span>}
-          </span>
-          <span className="resort-snowfall-badge">❄️ {freshSnow} cm</span>
-        </div>
-      </div>
-
-      {/* Terrain breakdown */}
-      {resort.terrain && <TerrainSection terrain={resort.terrain} country={resort.country} />}
-
-      {/* Altitude Toggle */}
-      <div className="altitude-toggle">
-        <button
-          className={`altitude-btn ${altitude === 'base' ? 'active' : ''}`}
-          onClick={() => setAltitude('base')}
-        >
-          🏠 Base ({elev.base}m)
-        </button>
-        <button
-          className={`altitude-btn ${altitude === 'mid' ? 'active' : ''}`}
-          onClick={() => setAltitude('mid')}
-        >
-          ⛷️ Mid ({elev.mid}m)
-        </button>
-        <button
-          className={`altitude-btn ${altitude === 'peak' ? 'active' : ''}`}
-          onClick={() => setAltitude('peak')}
-        >
-          🏔️ Peak ({elev.peak}m)
-        </button>
-      </div>
-
-      {/* Summary Stats at selected altitude */}
-      <div className="altitude-summary">
-        <div className="summary-stat">
-          <span className="summary-label">🌡️ Avg Temp</span>
-          <span className="summary-value">{avgTemp !== null ? `${avgTemp}°C` : '—'}</span>
-        </div>
-        <div className="summary-stat">
-          <span className="summary-label">❄️ Snow Depth</span>
-          <span className="summary-value">{latestSnowDepth !== null ? `${latestSnowDepth} cm` : '—'}</span>
-        </div>
-        <div className="summary-stat">
-          <span className="summary-label">🧊 Freezing Level</span>
-          <span className="summary-value">{avgFreezingLevel !== null ? `${avgFreezingLevel}m` : '—'}</span>
-        </div>
-        <div className="summary-stat">
-          <span className="summary-label">👁️ Visibility</span>
-          <span className="summary-value">{avgVisibility !== null ? `${avgVisibility} km` : '—'}</span>
-        </div>
-      </div>
-
-      {/* Hourly Timeline */}
-      {timeline.length > 0 && (
-        <div className="hourly-timeline-section">
-          <div className="timeline-title">📊 24-Hour Forecast</div>
-          <div className="hourly-timeline">
-            {timeline.map((entry) => (
-              <HourlyEntry key={entry.hour} entry={entry} altitude={altitude} />
-            ))}
-          </div>
+    <article
+      className={`resort-card glass ${featured ? 'is-featured' : ''}`}
+      style={{ '--i': index }}
+      aria-label={`${resort.name}, match ${resort.match}`}
+    >
+      {featured && (
+        <div className="featured-eyebrow">
+          <Sparkles size={14} /> Top pick for you
         </div>
       )}
 
-      {/* History */}
-      {resort.history && resort.history.length > 0 && (
-        <div className="history-section">
-          <div className="history-title">❄️ Snowfall — Recent Days</div>
-          <div className="history-days">
-            {resort.history.map((day) => (
-              <div key={day.date} className="history-day">
-                <div className="history-day-date">
-                  {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  {day.isForecast && <span className="forecast-label"> (forecast)</span>}
-                </div>
-                <div className="history-day-value">{day.snowfallMid ?? day.snowfall} cm</div>
-              </div>
-            ))}
-          </div>
+      <header className="rc-head">
+        <div className="rc-title">
+          <h3>{resort.name}</h3>
+          <p className="rc-meta">
+            <span aria-hidden="true">{flag(resort.country)}</span> {resort.region}
+            {resort.season.glacier && <span className="rc-meta-dot">Glacier</span>}
+          </p>
         </div>
-      )}
+        <ScoreRing score={resort.match} size={featured ? 88 : 62} />
+      </header>
 
-      <div className="resort-actions">
+      <div className="rc-pills">
         <a
+          className="pill pill-drive"
           href={directionsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="resort-link maps-link"
-          aria-label={`Open driving directions to ${resort.name} in Google Maps`}
+          title={drive.source === 'estimate' ? 'Estimated — routing unavailable' : 'Road network drive time, no traffic'}
+          aria-label={`${formatDuration(drive.minutes, drive.source)} drive. Open directions in Google Maps`}
         >
-          🧭 {origin?.fromDevice ? 'Navigate with Google Maps' : 'Directions in Google Maps'}
+          <Car size={15} /> {formatDuration(drive.minutes, drive.source)}
+          <small>{Math.round(drive.km)} km</small>
         </a>
+        {resort.ridersToday > 0 && (
+          <button className="pill pill-riders" onClick={onMeet}>
+            <span className="live-dot" aria-hidden="true" />
+            <Users size={15} /> {resort.ridersToday} riding today
+          </button>
+        )}
+        {multiDay && snow.tripSnow >= 2 && (
+          <span className="pill pill-snow">
+            <Snowflake size={15} /> {snow.tripSnow} cm over the trip
+          </span>
+        )}
+        {resort.confidence !== 'high' && (
+          <span className={`pill pill-muted conf-${resort.confidence}`}>{resort.confidence} confidence</span>
+        )}
+      </div>
+
+      <div className="rc-stats">
+        <Stat icon={Snowflake} label="Fresh 24 h" value={`${Math.round(snow.fresh24)} cm`} hot={snow.fresh24 >= 10} />
+        <Stat
+          icon={Layers}
+          label="Snow cover"
+          value={snow.cover === 'glacier' ? 'Glacier' : `${snow.depthMid} cm`}
+          sub={COVER[snow.cover]}
+        />
+        <Stat icon={Sun} label="Sunshine" value={`${weather.sunHours} h`} sub="of 8 ski hours" />
+        <Stat
+          icon={Thermometer}
+          label="Mid-mountain"
+          value={formatTemp(weather.tempMid)}
+          sub={weather.wind != null ? `${weather.wind} km/h wind` : null}
+        />
+      </div>
+
+      {resort.tags.length > 0 && (
+        <div className="tags">
+          {resort.tags.map((t) => (
+            <span key={t} className={`tag tone-${TAGS[t]?.tone || 'ice'}`}>
+              {TAGS[t]?.label || t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {resort.reasons.length > 0 && (
+        <ul className="reasons">
+          {resort.reasons.map((r) => (
+            <li key={r}>
+              <Check size={15} strokeWidth={3} /> {r}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {multiDay && <DayStrip days={resort.days} bestDate={resort.bestDate} />}
+
+      {resort.terrain && <TerrainBar terrain={resort.terrain} country={resort.country} />}
+
+      <footer className="rc-actions">
+        <a className="btn btn-primary" href={directionsUrl} target="_blank" rel="noopener noreferrer">
+          <Navigation size={17} /> {origin?.fromDevice ? 'Navigate' : 'Directions'}
+        </a>
+        <button className="btn btn-ghost" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          Hourly <ChevronDown size={16} className={open ? 'rot-180' : ''} />
+        </button>
         {resort.website && (
           <a
+            className="icon-btn"
             href={resort.website}
             target="_blank"
             rel="noopener noreferrer"
-            className="resort-link"
+            aria-label={`${resort.name} website`}
           >
-            🌐 Resort Website →
+            <ExternalLink size={18} />
           </a>
         )}
-      </div>
+      </footer>
+
+      {open && <ResortDetails resortId={resort.id} date={resort.bestDate} elevations={resort.elevations} />}
+    </article>
+  );
+}
+
+function Stat({ icon: Icon, label, value, sub, hot }) {
+  return (
+    <div className={`stat ${hot ? 'is-hot' : ''}`}>
+      <span className="stat-label">
+        <Icon size={13} /> {label}
+      </span>
+      <strong className="stat-value">{value}</strong>
+      {sub && <span className="stat-sub">{sub}</span>}
     </div>
   );
 }
 
-// North America grades runs green/blue/black; Europe grades blue/red/black.
-const NA_COUNTRIES = new Set(['US', 'CA']);
-
-function TerrainSection({ terrain, country }) {
-  const isNA = NA_COUNTRIES.has(country);
-  const levels = [
-    { pct: terrain.pctEasy, label: isNA ? 'Green' : 'Blue', cls: isNA ? 'terrain-green' : 'terrain-blue' },
-    { pct: terrain.pctIntermediate, label: isNA ? 'Blue' : 'Red', cls: isNA ? 'terrain-blue' : 'terrain-red' },
-    { pct: terrain.pctAdvanced, label: 'Black', cls: 'terrain-black' },
-  ].filter((l) => l.pct != null && l.pct > 0);
-
-  const hasBar = levels.length > 0;
-
+function DayStrip({ days, bestDate }) {
   return (
-    <div className="terrain-section">
-      <div className="terrain-header">
-        <span className="terrain-title">⛷️ Terrain</span>
-        <div className="terrain-facts">
-          {terrain.pisteKm != null && <span title="Total marked pistes (may include the full connected ski area)">📐 {terrain.pisteKm} km of pistes</span>}
-          {terrain.lifts != null && <span>🚡 {terrain.lifts} lifts</span>}
-          {terrain.snowparks != null && terrain.snowparks > 0 && (
-            <span className="snowpark-badge">🏂 {terrain.snowparks} snow park{terrain.snowparks !== 1 ? 's' : ''}</span>
-          )}
+    <div className="day-strip" role="list" aria-label="Day by day">
+      {days.map((d) => (
+        <div
+          key={d.date}
+          role="listitem"
+          className={`ds-day ${d.date === bestDate ? 'is-best' : ''} ${d.open ? '' : 'is-closed'}`}
+          aria-label={`${formatDate(d.date)}: ${d.open ? `score ${d.score}` : 'closed'}`}
+        >
+          <span className="ds-name">{formatDate(d.date, { weekday: 'short' })}</span>
+          <span className="ds-track">
+            <i className={`ds-bar tone-${scoreTone(d.score).tone}`} style={{ '--h': `${d.open ? Math.max(6, d.score) : 0}%` }} />
+          </span>
+          <span className="ds-wx">
+            {!d.open ? (
+              'Shut'
+            ) : d.fresh24 >= 3 ? (
+              <>
+                <Snowflake size={11} />
+                {Math.round(d.fresh24)}
+              </>
+            ) : d.sunHours >= 5 ? (
+              <Sun size={12} />
+            ) : (
+              formatTemp(d.tempMid)
+            )}
+          </span>
         </div>
-      </div>
-      {hasBar && (
-        <>
-          <div className="terrain-bar" title="Share of marked terrain by difficulty">
-            {levels.map((l) => (
-              <div key={l.label} className={`terrain-segment ${l.cls}`} style={{ width: `${l.pct}%` }} />
-            ))}
-          </div>
-          <div className="terrain-legend">
-            {levels.map((l) => (
-              <span key={l.label} className="terrain-legend-item">
-                <span className={`terrain-dot ${l.cls}`} /> {l.pct}% {l.label}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
+      ))}
     </div>
   );
-}
-
-function formatDriveTime(minutes, source) {
-  const prefix = source === 'estimate' ? '~' : '';
-  if (minutes < 60) return `${prefix}${minutes} min`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${prefix}${h}h${m > 0 ? ` ${m.toString().padStart(2, '0')}m` : ''}`;
-}
-
-function driveTitle(resort) {
-  const source =
-    resort.driveSource === 'estimate'
-      ? 'Estimated drive time (routing service unavailable)'
-      : 'Drive time via road network (typical traffic not included)';
-  return `${source} — tap for Google Maps directions`;
-}
-
-function HourlyEntry({ entry, altitude }) {
-  const temp = entry.temperature?.[altitude] ?? null;
-  const snowDepth = entry.snowDepth?.[altitude] ?? null;
-
-  // Support both object (altitude-specific) and legacy scalar snowfall values
-  const snowfallAtAlt =
-    entry.snowfall && typeof entry.snowfall === 'object'
-      ? (entry.snowfall[altitude] ?? 0)
-      : (entry.snowfall ?? 0);
-
-  const isSnowing = snowfallAtAlt > 0;
-  const isRaining = entry.precipitation > 0 && !isSnowing;
-
-  const skyIcon = entry.skyCondition === 'sunny'
-    ? '☀️'
-    : entry.skyCondition === 'partly cloudy'
-    ? '⛅'
-    : '☁️';
-
-  const precipIcon = isSnowing ? '❄️' : isRaining ? '🌧️' : '';
-  const precipValue = isSnowing
-    ? `${snowfallAtAlt}cm`
-    : isRaining
-    ? `${entry.precipitation}mm`
-    : '';
-
-  // Bar height for snowfall (max ~3cm per hour = 100%)
-  const snowBarHeight = Math.min(100, (snowfallAtAlt / 3) * 100);
-  const precipBarHeight = Math.min(100, (entry.precipitation / 5) * 100);
-
-  return (
-    <div className="hourly-entry">
-      <div className="hourly-time">{formatHour(entry.hour)}</div>
-      <div className="hourly-sky">{skyIcon}</div>
-      <div className="hourly-temp" style={{ color: temp !== null && temp <= 0 ? '#3b82f6' : '#ef4444' }}>
-        {temp !== null ? `${temp}°` : '—'}
-      </div>
-      <div className="hourly-precip-bar">
-        {snowfallAtAlt > 0 && (
-          <div className="snow-bar" style={{ height: `${snowBarHeight}%` }} title={`Snow: ${snowfallAtAlt}cm`} />
-        )}
-        {entry.precipitation > 0 && snowfallAtAlt === 0 && (
-          <div className="rain-bar" style={{ height: `${precipBarHeight}%` }} title={`Rain: ${entry.precipitation}mm`} />
-        )}
-      </div>
-      <div className="hourly-precip-text">
-        {precipIcon} {precipValue}
-      </div>
-      <div className="hourly-wind">💨 {entry.windSpeed}</div>
-      <div className="hourly-visibility">👁️ {entry.visibility}km</div>
-    </div>
-  );
-}
-
-function formatHour(h) {
-  if (h === 0) return '12am';
-  if (h < 12) return `${h}am`;
-  if (h === 12) return '12pm';
-  return `${h - 12}pm`;
-}
-
-function getAvgTemp(timeline, altitude) {
-  const temps = timeline
-    .map((e) => e.temperature?.[altitude])
-    .filter((t) => t !== null && t !== undefined);
-  if (temps.length === 0) return null;
-  return Math.round((temps.reduce((a, b) => a + b, 0) / temps.length) * 10) / 10;
-}
-
-function getLatestSnowDepth(timeline, altitude) {
-  // Get the most representative snow depth (midday value or last available)
-  const middayEntry = timeline.find((e) => e.hour === 12) || timeline[timeline.length - 1];
-  if (!middayEntry) return null;
-  const depth = middayEntry.snowDepth?.[altitude];
-  return depth !== null && depth !== undefined ? depth : null;
-}
-
-function getAvgFreezingLevel(timeline) {
-  const levels = timeline
-    .map((e) => e.freezingLevel)
-    .filter((l) => l !== null && l !== undefined);
-  if (levels.length === 0) return null;
-  return Math.round(levels.reduce((a, b) => a + b, 0) / levels.length);
-}
-
-function getAvgVisibility(timeline) {
-  const vals = timeline
-    .map((e) => e.visibility)
-    .filter((v) => v !== null && v !== undefined);
-  if (vals.length === 0) return null;
-  return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
 }

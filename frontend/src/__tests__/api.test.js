@@ -64,32 +64,41 @@ describe('api.js – searchLocation', () => {
   });
 });
 
-describe('api.js – getRecommendations', () => {
-  it('calls the recommend endpoint with all required query parameters', async () => {
-    globalThis.fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ results: [], count: 0 }),
+describe('api.js – discover', () => {
+  const query = {
+    lat: 46.02,
+    lon: 7.75,
+    today: '2026-01-15',
+    dates: ['2026-01-17', '2026-01-18'],
+    trip: 'weekend',
+    drive: 'happy',
+    style: 'powder',
+  };
+
+  it('calls the discover endpoint with the full trip query', async () => {
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ results: [] }) });
+
+    const { discover } = await import('../api.js');
+    await discover(query);
+
+    const params = new URL(globalThis.fetch.mock.calls[0][0], 'http://x').searchParams;
+    expect(globalThis.fetch.mock.calls[0][0]).toContain('/api/discover');
+    expect(Object.fromEntries(params)).toEqual({
+      lat: '46.02',
+      lon: '7.75',
+      today: '2026-01-15',
+      dates: '2026-01-17,2026-01-18',
+      trip: 'weekend',
+      drive: 'happy',
+      style: 'powder',
     });
-
-    const { getRecommendations } = await import('../api.js');
-    await getRecommendations({ lat: 46.02, lon: 7.75, date: '2026-01-15', radius: 100, minSnowfall: 5 });
-
-    const calledUrl = globalThis.fetch.mock.calls[0][0];
-    expect(calledUrl).toContain('/api/recommend');
-    expect(calledUrl).toContain('lat=46.02');
-    expect(calledUrl).toContain('lon=7.75');
-    expect(calledUrl).toContain('date=2026-01-15');
-    expect(calledUrl).toContain('radius=100');
-    expect(calledUrl).toContain('minSnowfall=5');
   });
 
-  it('throws when the recommend endpoint returns an error', async () => {
+  it('throws when the discover endpoint returns an error', async () => {
     globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 500 });
 
-    const { getRecommendations } = await import('../api.js');
-    await expect(
-      getRecommendations({ lat: 0, lon: 0, date: '2026-01-01', radius: 50, minSnowfall: 0 }),
-    ).rejects.toThrow('Failed to get recommendations');
+    const { discover } = await import('../api.js');
+    await expect(discover(query)).rejects.toThrow('Could not load resorts');
   });
 });
 

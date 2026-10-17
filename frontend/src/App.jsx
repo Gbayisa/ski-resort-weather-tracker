@@ -1,86 +1,148 @@
-import { useState, useCallback } from 'react';
-import Hero from './components/Hero.jsx';
-import Snowfall from './components/Snowfall.jsx';
-import SearchPanel from './components/SearchPanel.jsx';
-import ResultsList from './components/ResultsList.jsx';
-import AdSlot from './components/AdSlot.jsx';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import VideoHero from './components/VideoHero.jsx';
+import { LocationBar } from './components/Location.jsx';
+import TripPlanner, { DEFAULT_DRIVE } from './components/TripPlanner.jsx';
+import Results from './components/Results.jsx';
+import MeetView from './components/meet/MeetView.jsx';
+import ProfileView from './components/ProfileView.jsx';
+import { TopBar, BottomNav } from './components/Nav.jsx';
 import Footer from './components/Footer.jsx';
-import { getRecommendations } from './api.js';
-import { localISODate, localISODateOffset } from './utils/dates.js';
+import { discover, meetApi } from './api.js';
+import { usePersistentState } from './hooks/usePersistentState.js';
+import { useHashRoute } from './hooks/useHashRoute.js';
+import { localISODate, defaultDayOffset, tripDates } from './utils/dates.js';
 
-const getTomorrowDate = () => localISODateOffset(1);
-const getMaxDate = () => localISODateOffset(7);
+/** Fetch ranked resorts whenever the query changes; keeps the last result while refreshing. */
+function useDiscover(location, query) {
+  const [state, setState] = useState({ data: null, loading: false, error: null });
+  const key = location ? JSON.stringify([location.latitude, location.longitude, query]) : null;
+
+  useEffect(() => {
+    if (!key) return undefined;
+    const controller = new AbortController();
+    setState((s) => ({ ...s, loading: true, error: null }));
+    const t = setTimeout(() => {
+      discover({ lat: location.latitude, lon: location.longitude, ...query }, controller.signal)
+        .then((data) => setState({ data, loading: false, error: null }))
+        .catch((err) => {
+          if (err.name !== 'AbortError') setState((s) => ({ ...s, loading: false, error: err.message }));
+        });
+    }, 120);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+    // `key` serialises location + query, so it is the only dependency needed
+  }, [key]);
+
+  return state;
+}
+
+function useToast() {
+  const [message, setMessage] = useState(null);
+  const timer = useRef(null);
+  const toast = useCallback((msg) => {
+    setMessage(msg);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setMessage(null), 3200);
+  }, []);
+  return [message, toast];
+}
 
 export default function App() {
-  const [location, setLocation] = useState(null);
-  const [date, setDate] = useState(getTomorrowDate());
-  const [radius, setRadius] = useState(200);
-  const [minSnowfall, setMinSnowfall] = useState(0);
-  const [results, setResults] = useState(null);
-  // The location the current results were computed from (drive times + directions origin)
-  const [searchedLocation, setSearchedLocation] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [searched, setSearched] = useState(false);
+  const [route, navigate] = useHashRoute();
+  const [location, setLocation] = usePersistentState('pr.location', null);
+  const [trip, setTrip] = usePersistentState('pr.trip', 'day');
+  const [style, setStyle] = usePersistentState('pr.style', 'allmountain');
+  // null = automatic: the drive tolerance follows the trip length until the user picks one
+  const [driveChoice, setDriveChoice] = usePersistentState('pr.drive', null);
+  const [dayOffset, setDayOffset] = useState(defaultDayOffset);
+  const [me, setMe] = useState(undefined);
+  const [toastMessage, toast] = useToast();
 
-  const handleSearch = useCallback(async () => {
-    if (!location) return;
-    setLoading(true);
-    setError(null);
-    setSearched(true);
-    try {
-      const data = await getRecommendations({
-        lat: location.latitude,
-        lon: location.longitude,
-        date,
-        radius,
-        minSnowfall,
-      });
-      setResults(data.results);
-      setSearchedLocation(location);
-    } catch (err) {
-      setError(err.message || 'Something went wrong');
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [location, date, radius, minSnowfall]);
+  const drive = driveChoice ?? DEFAULT_DRIVE[trip];
+  const today = localISODate();
+  // `today` is a dependency so the dates roll over when the app stays open past midnight
+  const dates = useMemo(() => tripDates(trip, dayOffset), [trip, dayOffset, today]);
+  const query = useMemo(() => ({ today, dates, trip, drive, style }), [today, dates, trip, drive, style]);
+  const results = useDiscover(location, query);
+
+  useEffect(() => {
+    meetApi
+      .me()
+      .then(setMe)
+      .catch(() => setMe({ rider: null }));
+  }, []);
+
+  const changeTrip = (t) => {
+    setTrip(t);
+    setDriveChoice(null);
+  };
 
   return (
-    <div className="app-container">
-      <Snowfall />
-      <Hero />
-      <main className="main-content">
-        <SearchPanel
-          location={location}
-          setLocation={setLocation}
-          date={date}
-          setDate={setDate}
-          minDate={localISODate()}
-          maxDate={getMaxDate()}
-          radius={radius}
-          setRadius={setRadius}
-          minSnowfall={minSnowfall}
-          setMinSnowfall={setMinSnowfall}
-          onSearch={handleSearch}
-          loading={loading}
-        />
+    <div className={`app route-${route}`}>
+      <TopBar route={route} navigate={navigate} me={me} overHero={route === 'discover'} />
 
-        <AdSlot position="top" />
+      {route === 'discover' && (
+        <main>
+          <VideoHero compact={!!location}>
+            <p className="eyebrow hero-eyebrow">Live snow · Real drive times · Riders on the mountain</p>
+            <h1 className="hero-title">
+              Your perfect ski day, <span className="grad-text">in three taps.</span>
+            </h1>
+            <LocationBar location={location} onChange={setLocation} />
+          </VideoHero>
 
-        {error && <div className="error-banner">⚠️ {error}</div>}
+          {location && (
+            <div className="discover-body">
+              <TripPlanner
+                trip={trip}
+                onTrip={changeTrip}
+                dayOffset={dayOffset}
+                onDayOffset={setDayOffset}
+                drive={drive}
+                onDrive={setDriveChoice}
+                style={style}
+                onStyle={setStyle}
+                outlook={results.data?.outlook}
+                today={today}
+                dates={dates}
+              />
+              <Results
+                state={results}
+                origin={location}
+                trip={trip}
+                drive={drive}
+                style={style}
+                dates={dates}
+                onStyle={setStyle}
+                onMeet={() => navigate('meet')}
+                locationName={location.name}
+              />
+            </div>
+          )}
+        </main>
+      )}
 
-        <ResultsList
-          results={results}
-          origin={searchedLocation}
-          loading={loading}
-          searched={searched}
-          date={date}
-        />
+      {route === 'meet' && (
+        <main className="page-wrap">
+          <MeetView me={me} setMe={setMe} navigate={navigate} toast={toast} />
+        </main>
+      )}
 
-        <AdSlot position="bottom" />
-      </main>
+      {route === 'profile' && (
+        <main className="page-wrap">
+          {me === undefined ? null : (
+            <ProfileView key={me?.rider?.id ?? 'new'} me={me} setMe={setMe} navigate={navigate} toast={toast} />
+          )}
+        </main>
+      )}
+
       <Footer />
+      <BottomNav route={route} me={me} />
+      <div className={`toast ${toastMessage ? 'is-visible' : ''}`} role="status" aria-live="polite">
+        {toastMessage}
+      </div>
     </div>
   );
 }

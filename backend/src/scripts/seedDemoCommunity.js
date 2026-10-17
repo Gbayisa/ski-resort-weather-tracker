@@ -37,7 +37,7 @@ export function seedDemoCommunity() {
     .prepare('SELECT * FROM resorts ORDER BY piste_km DESC NULLS LAST')
     .all()
     .filter((r) => seasonStatus(r, today).inSeason)
-    .slice(0, 6);
+    .slice(0, 3);
   if (openResorts.length === 0) return;
 
   const insert = db.prepare(
@@ -59,8 +59,8 @@ export function seedDemoCommunity() {
     );
     const now = Date.now();
     ids.forEach((riderId, i) => {
-      // Consecutive riders (a woman/man pair in DEMO_RIDERS) share a resort, cycling the 3 biggest open ones
-      const resort = openResorts[Math.floor(i / 2) % Math.min(openResorts.length, 3)];
+      // Consecutive riders (a woman/man pair in DEMO_RIDERS) share a resort, cycling the biggest open ones
+      const resort = openResorts[Math.floor(i / 2) % openResorts.length];
       const createdAt = new Date(now - (i * 7 + 3) * 60 * 1000).toISOString();
       const expiresAt = new Date(now + CHECKIN_HOURS * 3600 * 1000).toISOString();
       checkin.run(riderId, resort.id, JSON.stringify(INTENT_SETS[i % INTENT_SETS.length]), NOTES[i % NOTES.length], createdAt, expiresAt);
