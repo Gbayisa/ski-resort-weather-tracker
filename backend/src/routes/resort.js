@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { getWeatherForResort } from '../services/weatherCache.js';
-import { buildTerrain } from '../services/recommendations.js';
+import { terrainOf } from '../services/discover.js';
 import { getDriveInfoBatch } from '../services/driveTime.js';
 
 const router = Router();
@@ -45,7 +45,7 @@ router.get('/:id', async (req, res) => {
       country: resort.country,
       region: resort.region,
       website: resort.website,
-      terrain: buildTerrain(resort),
+      terrain: terrainOf(resort),
       forecastDate: date,
       ...drive,
       ...(weather || {}),

@@ -2,6 +2,10 @@ import cron from 'node-cron';
 import { getDb } from '../db/database.js';
 import { ensureForecasts } from '../services/weatherCache.js';
 import { cleanExpiredRouteCache } from '../services/driveTime.js';
+import { seedDemoCommunity } from '../scripts/seedDemoCommunity.js';
+
+/** Chats are for meeting up on the day; keep them a week, then delete. */
+const CHAT_RETENTION_DAYS = 7;
 
 /** Refresh forecasts that expire within this window, so users never hit a cold cache. */
 const REFRESH_AHEAD_MINUTES = 20;
@@ -15,6 +19,7 @@ export function startScheduledJobs() {
   // Every 3 hours (matches CACHE_TTL_HOURS): ~297 resorts × 8 runs ≈ 2.4k Open-Meteo calls/day
   cron.schedule('5 */3 * * *', () => {
     refreshAllForecasts().catch((err) => console.error('[Job] Forecast refresh failed:', err.message));
+    seedDemoCommunity(); // no-op in production
   });
 
   // Clean expired cache entries every 6 hours
@@ -62,5 +67,11 @@ function cleanExpiredCache() {
   const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   const forecastChanges = db.prepare('DELETE FROM resort_forecasts WHERE expires_at < ?').run(dayAgo).changes;
   const routeChanges = cleanExpiredRouteCache();
-  console.log(`[Job] Cleaned ${forecastChanges} stale forecasts + ${routeChanges} route cache entries.`);
+  const now = new Date().toISOString();
+  const checkins = db.prepare('DELETE FROM checkins WHERE expires_at < ?').run(now).changes;
+  const chatCutoff = new Date(Date.now() - CHAT_RETENTION_DAYS * 24 * 3600 * 1000).toISOString();
+  const chats = db.prepare('DELETE FROM connections WHERE updated_at < ?').run(chatCutoff).changes;
+  console.log(
+    `[Job] Cleaned ${forecastChanges} stale forecasts, ${routeChanges} routes, ${checkins} check-ins, ${chats} old chats.`
+  );
 }

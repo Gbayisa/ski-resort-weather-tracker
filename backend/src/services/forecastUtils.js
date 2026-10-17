@@ -70,7 +70,7 @@ const ALT_PRECIP_TO_SNOW = 1;
  * but the altitude is cold enough, estimate snowfall from precipitation using
  * the standard 10:1 snow:water depth ratio (1 mm liquid ≈ 1 cm snow).
  */
-function computeSnowfallAtAlt(snowfall, precipitation, tempAtAlt) {
+export function computeSnowfallAtAlt(snowfall, precipitation, tempAtAlt) {
   if (tempAtAlt === null || tempAtAlt === undefined) {
     return Math.round(snowfall * 10) / 10;
   }

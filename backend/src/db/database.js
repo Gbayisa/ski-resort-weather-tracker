@@ -4,16 +4,20 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '..', 'data', 'ski-tracker.db');
+// DB_PATH=':memory:' gives tests an isolated database
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'ski-tracker.db');
 
 let db;
 
 export function getDb() {
   if (!db) {
-    const dataDir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    if (DB_PATH !== ':memory:') {
+      const dataDir = path.dirname(DB_PATH);
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    }
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
   }
   return db;
 }
@@ -58,6 +62,71 @@ export function initDb() {
       expires_at TEXT NOT NULL,
       UNIQUE(origin_key, resort_id),
       FOREIGN KEY (resort_id) REFERENCES resorts(id)
+    );
+
+    -- ===== Community (meet riders on the mountain) =====
+    -- Accounts are device tokens (only the SHA-256 hash is stored).
+    CREATE TABLE IF NOT EXISTS riders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      age INTEGER NOT NULL CHECK (age >= 18),
+      sport TEXT NOT NULL,
+      gender TEXT NOT NULL,
+      level TEXT NOT NULL,
+      bio TEXT DEFAULT '',
+      visibility TEXT NOT NULL DEFAULT 'everyone',
+      avatar TEXT NOT NULL,
+      is_demo INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Resort-level presence only: no coordinates are ever stored.
+    CREATE TABLE IF NOT EXISTS checkins (
+      rider_id INTEGER PRIMARY KEY REFERENCES riders(id) ON DELETE CASCADE,
+      resort_id INTEGER NOT NULL REFERENCES resorts(id),
+      intents TEXT NOT NULL DEFAULT '[]',
+      note TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_checkins_resort ON checkins(resort_id, expires_at);
+
+    CREATE TABLE IF NOT EXISTS connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_rider INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+      to_rider INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+      resort_id INTEGER NOT NULL REFERENCES resorts(id),
+      intent TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_connections_riders ON connections(from_rider, to_rider);
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      connection_id INTEGER NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+      from_rider INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_messages_connection ON messages(connection_id, id);
+
+    CREATE TABLE IF NOT EXISTS blocks (
+      blocker INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+      blocked INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (blocker, blocked)
+    );
+
+    CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reporter INTEGER REFERENCES riders(id) ON DELETE SET NULL,
+      reported INTEGER REFERENCES riders(id) ON DELETE SET NULL,
+      reason TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE INDEX IF NOT EXISTS idx_resorts_lat_lon ON resorts(lat, lon);

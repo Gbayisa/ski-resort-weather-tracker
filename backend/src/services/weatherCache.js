@@ -65,6 +65,38 @@ export async function ensureForecasts(resorts, { freshUntil = new Date().toISOSt
   }
 }
 
+/** Parsed forecasts keyed by resort id; reused while the DB row's fetched_at is unchanged. */
+const parsedCache = new Map();
+
+/**
+ * Read cached forecasts for many resorts. Returns Map id → { hourly, apiElevation }.
+ * Expired rows are still returned (a few-hours-old forecast beats none) — the
+ * scheduler keeps them fresh.
+ */
+export function readForecasts(resortIds) {
+  const result = new Map();
+  if (resortIds.length === 0) return result;
+  const db = getDb();
+  const placeholders = resortIds.map(() => '?').join(',');
+  const rows = db
+    .prepare(`SELECT resort_id, fetched_at FROM resort_forecasts WHERE resort_id IN (${placeholders})`)
+    .all(...resortIds);
+  const getData = db.prepare('SELECT data FROM resort_forecasts WHERE resort_id = ?');
+
+  for (const row of rows) {
+    const hit = parsedCache.get(row.resort_id);
+    if (hit && hit.fetchedAt === row.fetched_at) {
+      result.set(row.resort_id, hit.forecast);
+      continue;
+    }
+    const parsed = JSON.parse(getData.get(row.resort_id).data);
+    const forecast = { hourly: parsed.hourly, apiElevation: parsed.apiElevation };
+    parsedCache.set(row.resort_id, { fetchedAt: row.fetched_at, forecast });
+    result.set(row.resort_id, forecast);
+  }
+  return result;
+}
+
 /**
  * Get weather data for a resort on a given date, using the cached forecast
  * (fetching it if missing). Returns null if no forecast could be obtained.
