@@ -38,10 +38,21 @@ export default function ResortCard({ resort, date }) {
           </div>
         </div>
         <div className="resort-badges">
-          <span className="resort-distance">📏 {resort.distance} km</span>
+          {resort.driveTimeMin != null && (
+            <span className="resort-drive-badge" title={driveTitle(resort)}>
+              🚗 {formatDriveTime(resort.driveTimeMin, resort.driveSource)}
+            </span>
+          )}
+          <span className="resort-distance" title="Road distance (straight line in parentheses)">
+            🛣️ {resort.driveDistanceKm ?? resort.distance} km
+            {resort.driveDistanceKm != null && <span className="crow-distance"> ({resort.distance} direct)</span>}
+          </span>
           <span className="resort-snowfall-badge">❄️ {freshSnow} cm</span>
         </div>
       </div>
+
+      {/* Terrain breakdown */}
+      {resort.terrain && <TerrainSection terrain={resort.terrain} country={resort.country} />}
 
       {/* Altitude Toggle */}
       <div className="altitude-toggle">
@@ -115,18 +126,89 @@ export default function ResortCard({ resort, date }) {
         </div>
       )}
 
-      {resort.website && (
-        <a
-          href={resort.website}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="resort-link"
-        >
-          🌐 Visit Resort Website →
-        </a>
+      <div className="resort-actions">
+        {resort.googleMapsUrl && (
+          <a
+            href={resort.googleMapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="resort-link maps-link"
+          >
+            🗺️ Directions in Google Maps
+          </a>
+        )}
+        {resort.website && (
+          <a
+            href={resort.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="resort-link"
+          >
+            🌐 Resort Website →
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// North America grades runs green/blue/black; Europe grades blue/red/black.
+const NA_COUNTRIES = new Set(['US', 'CA']);
+
+function TerrainSection({ terrain, country }) {
+  const isNA = NA_COUNTRIES.has(country);
+  const levels = [
+    { pct: terrain.pctEasy, label: isNA ? 'Green' : 'Blue', cls: isNA ? 'terrain-green' : 'terrain-blue' },
+    { pct: terrain.pctIntermediate, label: isNA ? 'Blue' : 'Red', cls: isNA ? 'terrain-blue' : 'terrain-red' },
+    { pct: terrain.pctAdvanced, label: 'Black', cls: 'terrain-black' },
+  ].filter((l) => l.pct != null && l.pct > 0);
+
+  const hasBar = levels.length > 0;
+
+  return (
+    <div className="terrain-section">
+      <div className="terrain-header">
+        <span className="terrain-title">⛷️ Terrain</span>
+        <div className="terrain-facts">
+          {terrain.pisteKm != null && <span title="Total marked pistes (may include the full connected ski area)">📐 {terrain.pisteKm} km of pistes</span>}
+          {terrain.lifts != null && <span>🚡 {terrain.lifts} lifts</span>}
+          {terrain.snowparks != null && terrain.snowparks > 0 && (
+            <span className="snowpark-badge">🏂 {terrain.snowparks} snow park{terrain.snowparks !== 1 ? 's' : ''}</span>
+          )}
+        </div>
+      </div>
+      {hasBar && (
+        <>
+          <div className="terrain-bar" title="Share of marked terrain by difficulty">
+            {levels.map((l) => (
+              <div key={l.label} className={`terrain-segment ${l.cls}`} style={{ width: `${l.pct}%` }} />
+            ))}
+          </div>
+          <div className="terrain-legend">
+            {levels.map((l) => (
+              <span key={l.label} className="terrain-legend-item">
+                <span className={`terrain-dot ${l.cls}`} /> {l.pct}% {l.label}
+              </span>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
+}
+
+function formatDriveTime(minutes, source) {
+  const prefix = source === 'estimate' ? '~' : '';
+  if (minutes < 60) return `${prefix}${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${prefix}${h}h${m > 0 ? ` ${m.toString().padStart(2, '0')}m` : ''}`;
+}
+
+function driveTitle(resort) {
+  return resort.driveSource === 'estimate'
+    ? 'Estimated drive time (routing service unavailable)'
+    : 'Drive time via road network (typical traffic not included)';
 }
 
 function HourlyEntry({ entry, altitude }) {

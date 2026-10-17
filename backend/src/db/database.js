@@ -47,10 +47,39 @@ export function initDb() {
       FOREIGN KEY (resort_id) REFERENCES resorts(id)
     );
 
+    CREATE TABLE IF NOT EXISTS route_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      origin_key TEXT NOT NULL,
+      resort_id INTEGER NOT NULL,
+      distance_km REAL,
+      duration_min REAL,
+      source TEXT,
+      fetched_at TEXT DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL,
+      UNIQUE(origin_key, resort_id),
+      FOREIGN KEY (resort_id) REFERENCES resorts(id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_resorts_lat_lon ON resorts(lat, lon);
     CREATE INDEX IF NOT EXISTS idx_weather_cache_resort_date ON weather_cache(resort_id, forecast_date);
     CREATE INDEX IF NOT EXISTS idx_weather_cache_expires ON weather_cache(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_route_cache_origin ON route_cache(origin_key, resort_id);
+    CREATE INDEX IF NOT EXISTS idx_route_cache_expires ON route_cache(expires_at);
   `);
+
+  // Additive migrations for databases created before terrain stats existed
+  const existingCols = db.prepare('PRAGMA table_info(resorts)').all().map((c) => c.name);
+  const terrainCols = [
+    ['piste_km', 'piste_km REAL'],
+    ['lifts', 'lifts INTEGER'],
+    ['snowparks', 'snowparks INTEGER'],
+    ['pct_easy', 'pct_easy INTEGER'],
+    ['pct_intermediate', 'pct_intermediate INTEGER'],
+    ['pct_advanced', 'pct_advanced INTEGER'],
+  ];
+  for (const [name, ddl] of terrainCols) {
+    if (!existingCols.includes(name)) db.exec(`ALTER TABLE resorts ADD COLUMN ${ddl}`);
+  }
 
   console.log('Database initialized at', DB_PATH);
 }

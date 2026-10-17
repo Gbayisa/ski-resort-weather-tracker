@@ -7,7 +7,12 @@ A local MVP website that helps users find ski resorts near them with the best sn
 - **Location search** — type a city/zip code or use browser geolocation
 - **Date picker** — select any date up to 16 days ahead
 - **Smart filtering** — adjustable search radius and minimum snowfall threshold
-- **Resort ranking** — sorted by proximity, filtered by expected snowfall
+- **Resort ranking** — sorted by **drive time**, filtered by expected snowfall
+- **Real drive times & road distances** — batch-routed via the OSRM public API, cached 7 days,
+  with a clearly-labeled `~estimate` fallback (haversine × road-winding factor) when routing is unavailable
+- **Google Maps directions button** on every resort card (deep link, no API key needed)
+- **Terrain profiles** — piste km, lift count, snow parks, and difficulty split shown as a
+  color-coded bar (Green/Blue/Black for North America, Blue/Red/Black for Europe) for ~100 major resorts
 - **Detailed forecasts** — morning (6am–12pm) and afternoon (12pm–6pm) blocks showing:
   - Snowfall (cm)
   - Wind speed (km/h)
@@ -31,7 +36,8 @@ A local MVP website that helps users find ski resorts near them with the best sn
 | Background Jobs | node-cron |
 | Weather API | Open-Meteo (free, no API key needed) |
 | Geocoding | Open-Meteo Geocoding API |
-| Distance | Haversine formula |
+| Distance | Haversine formula (crow-flies pre-filter) |
+| Drive times | OSRM public `table` API (free, no key), SQLite-cached |
 
 ## Quick Start
 
@@ -87,8 +93,8 @@ The Vite dev server proxies `/api` requests to the backend automatically.
 |----------|--------|-------------|
 | `GET /api/health` | GET | App status + resort/cache counts |
 | `GET /api/geocoding/search?q=...` | GET | Location search (min 2 chars) |
-| `GET /api/recommend?lat=...&lon=...&date=...&radius=...&minSnowfall=...` | GET | Resort recommendations |
-| `GET /api/resort/:id?date=...` | GET | Single resort detail with forecast |
+| `GET /api/recommend?lat=...&lon=...&date=...&radius=...&minSnowfall=...` | GET | Resort recommendations (includes `driveTimeMin`, `driveDistanceKm`, `driveSource`, `terrain`, `googleMapsUrl`) |
+| `GET /api/resort/:id?date=...&lat=...&lon=...` | GET | Single resort detail with forecast (`lat`/`lon` optional — adds drive info) |
 
 ## Project Structure
 
@@ -181,11 +187,30 @@ A `render.yaml` Blueprint is included in the repo root to configure both service
   - Medium: 1–5 km
   - High: > 5 km
 
+### Drive Times
+
+- Results are routed in **one batched OSRM `table` request** (origin → all candidate resorts)
+- Road distances and durations are cached in SQLite for 7 days, keyed by origin rounded to ~1 km
+- If OSRM is unreachable (rate limit, offline), the app falls back to an estimate:
+  road distance ≈ crow-flies × 1.35, at a blended average speed that rises with trip length.
+  Estimates are labeled `driveSource: "estimate"` and shown with a `~` prefix in the UI
+- The OSRM demo server is best-effort; for production, self-host OSRM or use a commercial
+  routing API (Google Distance Matrix, Mapbox, GraphHopper) behind the same `driveTime.js` interface
+
+### Terrain Data
+
+- `backend/src/data/resortStats.js` holds approximate published stats (piste km, lifts,
+  snow parks, difficulty split) for ~100 major resorts, keyed by `osm_id`
+- Difficulty is stored generically (easy / intermediate / advanced) and labeled per region
+  in the UI: Green/Blue/Black in North America, Blue/Red/Black in Europe
+- Resorts without stats simply omit the terrain section
+
 ### Caching
 
 - Weather data is cached in SQLite with a 3-hour TTL
-- Background jobs warm the cache every 2 hours for upcoming dates
-- Expired cache entries are cleaned every 6 hours
+- Drive routes are cached in SQLite with a 7-day TTL
+- Background jobs warm the weather cache every 2 hours for upcoming dates
+- Expired cache entries (weather + routes) are cleaned every 6 hours
 
 ### Resort Discovery
 

@@ -282,3 +282,63 @@ describe('Forecast horizon cap', () => {
     expect(diffDays).toBeLessThanOrEqual(7);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Drive time formatting & terrain difficulty mapping (mirrors ResortCard.jsx)
+// ---------------------------------------------------------------------------
+function formatDriveTime(minutes, source) {
+  const prefix = source === 'estimate' ? '~' : '';
+  if (minutes < 60) return `${prefix}${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${prefix}${h}h${m > 0 ? ` ${m.toString().padStart(2, '0')}m` : ''}`;
+}
+
+const NA_COUNTRIES = new Set(['US', 'CA']);
+function terrainLevels(terrain, country) {
+  const isNA = NA_COUNTRIES.has(country);
+  return [
+    { pct: terrain.pctEasy, label: isNA ? 'Green' : 'Blue' },
+    { pct: terrain.pctIntermediate, label: isNA ? 'Blue' : 'Red' },
+    { pct: terrain.pctAdvanced, label: 'Black' },
+  ].filter((l) => l.pct != null && l.pct > 0);
+}
+
+describe('formatDriveTime', () => {
+  it('shows minutes below an hour', () => {
+    expect(formatDriveTime(49, 'osrm')).toBe('49 min');
+  });
+
+  it('shows hours and zero-padded minutes above an hour', () => {
+    expect(formatDriveTime(135, 'osrm')).toBe('2h 15m');
+    expect(formatDriveTime(61, 'osrm')).toBe('1h 01m');
+  });
+
+  it('omits minutes for exact hours', () => {
+    expect(formatDriveTime(120, 'osrm')).toBe('2h');
+  });
+
+  it('prefixes estimates with a tilde', () => {
+    expect(formatDriveTime(45, 'estimate')).toBe('~45 min');
+    expect(formatDriveTime(90, 'estimate')).toBe('~1h 30m');
+  });
+});
+
+describe('terrainLevels', () => {
+  const terrain = { pctEasy: 20, pctIntermediate: 50, pctAdvanced: 30 };
+
+  it('uses Green/Blue/Black labels for North America', () => {
+    expect(terrainLevels(terrain, 'US').map((l) => l.label)).toEqual(['Green', 'Blue', 'Black']);
+    expect(terrainLevels(terrain, 'CA').map((l) => l.label)).toEqual(['Green', 'Blue', 'Black']);
+  });
+
+  it('uses Blue/Red/Black labels for Europe', () => {
+    expect(terrainLevels(terrain, 'FR').map((l) => l.label)).toEqual(['Blue', 'Red', 'Black']);
+    expect(terrainLevels(terrain, 'CH').map((l) => l.label)).toEqual(['Blue', 'Red', 'Black']);
+  });
+
+  it('drops null or zero segments', () => {
+    const partial = { pctEasy: null, pctIntermediate: 60, pctAdvanced: 0 };
+    expect(terrainLevels(partial, 'AT').map((l) => l.label)).toEqual(['Red']);
+  });
+});

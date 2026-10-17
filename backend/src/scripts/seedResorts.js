@@ -1,4 +1,5 @@
 import { getDb, initDb } from '../db/database.js';
+import { RESORT_STATS } from '../data/resortStats.js';
 
 /**
  * Seed script: populates the resorts table with a curated set of well-known
@@ -457,8 +458,23 @@ export async function seed() {
 
   insertMany(SEED_RESORTS);
 
+  // Apply terrain stats (piste km, lifts, parks, difficulty split) where known.
+  // Runs as UPDATE so it also enriches rows inserted by earlier versions.
+  const updateStats = db.prepare(`
+    UPDATE resorts
+    SET piste_km = ?, lifts = ?, snowparks = ?, pct_easy = ?, pct_intermediate = ?, pct_advanced = ?
+    WHERE osm_id = ?
+  `);
+  const applyStats = db.transaction(() => {
+    for (const [osmId, s] of Object.entries(RESORT_STATS)) {
+      updateStats.run(s.pisteKm ?? null, s.lifts ?? null, s.parks ?? null, s.easy ?? null, s.inter ?? null, s.adv ?? null, osmId);
+    }
+  });
+  applyStats();
+
   const count = db.prepare('SELECT COUNT(*) as count FROM resorts').get();
-  console.log(`Seeded ${count.count} ski resorts.`);
+  const statsCount = db.prepare('SELECT COUNT(*) as count FROM resorts WHERE pct_easy IS NOT NULL').get();
+  console.log(`Seeded ${count.count} ski resorts (${statsCount.count} with terrain stats).`);
 }
 
 // Only run when executed directly (not when imported by tests or other modules)

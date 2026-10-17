@@ -36,7 +36,9 @@ export default function ResultsList({ results, loading, searched, date }) {
     <div>
       <div className="results-header">
         <h2>Ski Resorts</h2>
-        <span className="results-count">{results.length} resort{results.length !== 1 ? 's' : ''} found</span>
+        <span className="results-count">
+          {results.length} resort{results.length !== 1 ? 's' : ''} found · sorted by drive time
+        </span>
       </div>
       {results.map((resort) => (
         <ResortCard key={resort.id} resort={resort} date={date} />

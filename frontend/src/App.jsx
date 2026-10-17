@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import Hero from './components/Hero.jsx';
+import Snowfall from './components/Snowfall.jsx';
 import SearchPanel from './components/SearchPanel.jsx';
 import ResultsList from './components/ResultsList.jsx';
 import AdSlot from './components/AdSlot.jsx';
@@ -52,6 +53,7 @@ export default function App() {
 
   return (
     <div className="app-container">
+      <Snowfall />
       <Hero />
       <main className="main-content">
         <SearchPanel

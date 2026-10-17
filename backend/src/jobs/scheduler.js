@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { getDb } from '../db/database.js';
 import { fetchWeatherData } from '../services/openMeteo.js';
+import { cleanExpiredRouteCache } from '../services/driveTime.js';
 
 /**
  * Background job scheduler for:
@@ -70,5 +71,6 @@ function cleanExpiredCache() {
   const result = db
     .prepare("DELETE FROM weather_cache WHERE expires_at < datetime('now')")
     .run();
-  console.log(`[Job] Cleaned ${result.changes} expired cache entries.`);
+  const routeChanges = cleanExpiredRouteCache();
+  console.log(`[Job] Cleaned ${result.changes} expired weather + ${routeChanges} route cache entries.`);
 }

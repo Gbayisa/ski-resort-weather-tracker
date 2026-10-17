@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { getWeatherForResort } from '../services/weatherCache.js';
+import { buildTerrain } from '../services/recommendations.js';
+import { getDriveInfoBatch, buildGoogleMapsUrl } from '../services/driveTime.js';
 
 const router = Router();
 
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { date } = req.query;
+    const { date, lat, lon } = req.query;
 
     if (!date) {
       return res.status(400).json({ error: 'date query parameter is required' });
@@ -22,6 +24,20 @@ router.get('/:id', async (req, res) => {
 
     const weather = await getWeatherForResort(resort, date);
 
+    // Optional drive info when the client provides its origin
+    let drive = {};
+    if (lat && lon) {
+      const originLat = parseFloat(lat);
+      const originLon = parseFloat(lon);
+      const info = (await getDriveInfoBatch(originLat, originLon, [resort])).get(resort.id);
+      drive = {
+        driveDistanceKm: info.distanceKm,
+        driveTimeMin: info.durationMin,
+        driveSource: info.source,
+        googleMapsUrl: buildGoogleMapsUrl(originLat, originLon, resort.lat, resort.lon),
+      };
+    }
+
     res.json({
       id: resort.id,
       name: resort.name,
@@ -30,7 +46,9 @@ router.get('/:id', async (req, res) => {
       country: resort.country,
       region: resort.region,
       website: resort.website,
+      terrain: buildTerrain(resort),
       forecastDate: date,
+      ...drive,
       ...(weather || {}),
     });
   } catch (err) {

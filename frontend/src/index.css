@@ -821,3 +821,414 @@ body {
   .history-days { flex-direction: column; }
   .altitude-summary { grid-template-columns: 1fr 1fr; }
 }
+
+/* ===== DRIVE TIME & DIRECTIONS ===== */
+.resort-drive-badge {
+  background: linear-gradient(135deg, #10b981, #34d399);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.crow-distance {
+  font-weight: 500;
+  opacity: 0.75;
+  font-size: 0.78rem;
+}
+
+.resort-actions {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.maps-link {
+  background: var(--color-primary);
+  color: white !important;
+  padding: 0.4rem 0.9rem;
+  border-radius: 8px;
+}
+
+.maps-link:hover {
+  background: var(--color-primary-dark);
+  text-decoration: none !important;
+}
+
+/* ===== TERRAIN BREAKDOWN ===== */
+.terrain-section {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  background: var(--color-snow);
+  border-radius: 8px;
+}
+
+.terrain-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.terrain-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.terrain-facts {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.snowpark-badge {
+  color: var(--color-primary);
+}
+
+.terrain-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--color-border);
+}
+
+.terrain-segment {
+  height: 100%;
+}
+
+.terrain-green { background: #22c55e; }
+.terrain-blue { background: #3b82f6; }
+.terrain-red { background: #ef4444; }
+.terrain-black { background: #1f2937; }
+
+.terrain-legend {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.terrain-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.terrain-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* ============================================================
+   ALPINE REDESIGN — dynamic hero, snowfall, glass surfaces,
+   card motion. Overrides base styles above (same specificity,
+   later in cascade wins).
+   ============================================================ */
+
+body {
+  background:
+    linear-gradient(180deg, #eaf2fb 0%, #f2f6fc 40%, #e8eff9 100%);
+}
+
+/* ---- Ambient snowfall canvas ---- */
+.snowfall-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* ---- Hero: night-sky alpine scene ---- */
+.hero {
+  padding: 5.5rem 1rem 9rem;
+  margin-bottom: 0;
+  background:
+    radial-gradient(ellipse 900px 500px at 70% -10%, rgba(56,189,248,0.25) 0%, transparent 60%),
+    radial-gradient(ellipse 700px 420px at 15% 10%, rgba(129,140,248,0.18) 0%, transparent 60%),
+    linear-gradient(180deg, #0b1b33 0%, #12263f 45%, #1e3a5f 75%, #35608f 100%);
+}
+
+.hero::before,
+.hero::after,
+.hero-overlay {
+  display: none; /* replaced by SVG mountain layers */
+}
+
+.hero-stars {
+  position: absolute;
+  inset: 0 0 40% 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 25%, rgba(255,255,255,0.9) 50%, transparent 51%),
+    radial-gradient(1px 1px at 28% 12%, rgba(255,255,255,0.7) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 41% 32%, rgba(255,255,255,0.8) 50%, transparent 51%),
+    radial-gradient(1px 1px at 57% 8%, rgba(255,255,255,0.7) 50%, transparent 51%),
+    radial-gradient(2px 2px at 68% 26%, rgba(255,255,255,0.9) 50%, transparent 51%),
+    radial-gradient(1px 1px at 79% 15%, rgba(255,255,255,0.6) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 90% 30%, rgba(255,255,255,0.8) 50%, transparent 51%),
+    radial-gradient(1px 1px at 8% 55%, rgba(255,255,255,0.5) 50%, transparent 51%),
+    radial-gradient(1px 1px at 94% 50%, rgba(255,255,255,0.5) 50%, transparent 51%);
+  animation: twinkle 5s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes twinkle {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+
+.hero-aurora {
+  position: absolute;
+  inset: -20% -10% 30% -10%;
+  background: linear-gradient(100deg,
+    transparent 20%,
+    rgba(56, 189, 248, 0.12) 35%,
+    rgba(129, 140, 248, 0.14) 50%,
+    rgba(45, 212, 191, 0.10) 65%,
+    transparent 80%);
+  filter: blur(30px);
+  animation: aurora 9s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes aurora {
+  from { transform: translateX(-6%) skewY(-2deg); opacity: 0.7; }
+  to { transform: translateX(6%) skewY(2deg); opacity: 1; }
+}
+
+.hero-mountains {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 46%;
+  pointer-events: none;
+}
+
+.hero-mountains-back { animation: drift 26s ease-in-out infinite alternate; }
+.hero-mountains-mid { animation: drift 18s ease-in-out infinite alternate-reverse; }
+.hero-mountains-front { animation: none; }
+
+@keyframes drift {
+  from { transform: translateX(-0.8%); }
+  to { transform: translateX(0.8%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-stars, .hero-aurora, .hero-mountains-back, .hero-mountains-mid {
+    animation: none;
+  }
+}
+
+.hero-content {
+  animation: fadeUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero-icon {
+  font-size: 3.2rem;
+  margin-bottom: 0.25rem;
+  filter: drop-shadow(0 6px 16px rgba(56,189,248,0.45));
+}
+
+.hero h1 {
+  font-size: clamp(2.6rem, 6vw, 4rem);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  background: linear-gradient(180deg, #ffffff 30%, #a5d8ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+}
+
+.hero-title-accent {
+  background: linear-gradient(120deg, #38bdf8, #818cf8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-tagline {
+  font-size: 0.85rem !important;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.35em;
+  color: #7dd3fc;
+  opacity: 0.9 !important;
+  margin: 0.25rem auto 0.75rem !important;
+}
+
+.hero p {
+  color: #cfe3f7;
+  font-size: 1.05rem;
+}
+
+/* ---- Search panel: frosted glass floating over the peaks ---- */
+.search-panel {
+  margin-top: -4.5rem;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 24px 48px -12px rgba(11, 27, 51, 0.35),
+    0 4px 12px rgba(11, 27, 51, 0.12);
+  animation: fadeUp 0.9s 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.btn-search {
+  background: linear-gradient(135deg, #1a73e8, #0ea5e9);
+  box-shadow: 0 6px 16px rgba(26, 115, 232, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-search:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1558b0, #0284c7);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(26, 115, 232, 0.5);
+}
+
+/* ---- Resort cards: lift, glow, staggered entrance ---- */
+.resort-card {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 2px 6px rgba(11, 27, 51, 0.06), 0 12px 32px -18px rgba(11, 27, 51, 0.25);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  animation: cardIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  position: relative;
+  overflow: hidden;
+}
+
+.resort-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #38bdf8, #1a73e8 45%, #818cf8);
+  opacity: 0.9;
+}
+
+.resort-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 14px rgba(11, 27, 51, 0.1), 0 28px 48px -20px rgba(26, 115, 232, 0.35);
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(22px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.resort-card:nth-child(1) { animation-delay: 0.05s; }
+.resort-card:nth-child(2) { animation-delay: 0.12s; }
+.resort-card:nth-child(3) { animation-delay: 0.19s; }
+.resort-card:nth-child(4) { animation-delay: 0.26s; }
+.resort-card:nth-child(5) { animation-delay: 0.33s; }
+.resort-card:nth-child(n+6) { animation-delay: 0.4s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .resort-card, .hero-content, .search-panel {
+    animation: none;
+  }
+  .resort-card:hover { transform: none; }
+}
+
+/* ---- Badges: richer gradients & depth ---- */
+.resort-drive-badge {
+  background: linear-gradient(135deg, #059669, #34d399);
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.35);
+}
+
+.resort-snowfall-badge {
+  background: linear-gradient(135deg, #0284c7, #38bdf8);
+  box-shadow: 0 3px 10px rgba(14, 165, 233, 0.35);
+}
+
+.resort-distance {
+  border: 1px solid rgba(26, 115, 232, 0.18);
+}
+
+/* ---- Terrain bar: animated fill ---- */
+.terrain-section {
+  background: linear-gradient(180deg, #eef6fe 0%, #e8f2fc 100%);
+  border: 1px solid rgba(26, 115, 232, 0.1);
+}
+
+.terrain-bar {
+  height: 12px;
+  border-radius: 6px;
+}
+
+.terrain-segment {
+  transform-origin: left;
+  animation: growX 0.9s 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes growX {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terrain-segment { animation: none; }
+}
+
+/* ---- Maps button: bolder call to action ---- */
+.maps-link {
+  background: linear-gradient(135deg, #1a73e8, #0ea5e9);
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.maps-link:hover {
+  background: linear-gradient(135deg, #1558b0, #0284c7);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(26, 115, 232, 0.45);
+}
+
+/* ---- Results header ---- */
+.results-header h2 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(120deg, #12263f, #1a73e8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---- Altitude toggle: pill glow on active ---- */
+.altitude-btn.active {
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.35);
+}
+
+.altitude-btn {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.altitude-btn:hover {
+  transform: translateY(-1px);
+}
