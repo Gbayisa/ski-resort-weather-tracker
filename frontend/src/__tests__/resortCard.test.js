@@ -1,4 +1,19 @@
 import { describe, it, expect } from 'vitest';
+import { localISODate, localISODateOffset } from '../utils/dates.js';
+
+describe('localISODate', () => {
+  it('uses the local calendar day, not the UTC day, near midnight', () => {
+    // 11:30pm local on Jan 14 is already Jan 15 in UTC for anyone west of Greenwich
+    expect(localISODate(new Date(2026, 0, 14, 23, 30))).toBe('2026-01-14');
+    // 12:30am local on Jan 14 is still Jan 13 in UTC for anyone east of Greenwich
+    expect(localISODate(new Date(2026, 0, 14, 0, 30))).toBe('2026-01-14');
+  });
+
+  it('offsets across month and year boundaries', () => {
+    expect(localISODateOffset(1, new Date(2026, 0, 31, 22, 0))).toBe('2026-02-01');
+    expect(localISODateOffset(7, new Date(2026, 11, 28, 23, 0))).toBe('2027-01-04');
+  });
+});
 
 /**
  * Tests for ResortCard helper functions.
@@ -260,19 +275,13 @@ describe('Resort data shape for new features', () => {
 // ---------------------------------------------------------------------------
 // Forecast horizon cap (Test 4)
 // ---------------------------------------------------------------------------
-function getMaxDate() {
-  const d = new Date();
-  d.setDate(d.getDate() + 7);
-  return d.toISOString().split('T')[0];
-}
+const getMaxDate = () => localISODateOffset(7);
 
 describe('Forecast horizon cap', () => {
   it('max selectable date is exactly 7 days from today', () => {
-    const today = new Date();
-    const expected = new Date(today);
+    const expected = new Date();
     expected.setDate(expected.getDate() + 7);
-    const expectedStr = expected.toISOString().split('T')[0];
-    expect(getMaxDate()).toBe(expectedStr);
+    expect(getMaxDate()).toBe(localISODate(expected));
   });
 
   it('max date is no more than 7 days in the future', () => {

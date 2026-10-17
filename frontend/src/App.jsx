@@ -6,18 +6,10 @@ import ResultsList from './components/ResultsList.jsx';
 import AdSlot from './components/AdSlot.jsx';
 import Footer from './components/Footer.jsx';
 import { getRecommendations } from './api.js';
+import { localISODate, localISODateOffset } from './utils/dates.js';
 
-function getTomorrowDate() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
-}
-
-function getMaxDate() {
-  const d = new Date();
-  d.setDate(d.getDate() + 7);
-  return d.toISOString().split('T')[0];
-}
+const getTomorrowDate = () => localISODateOffset(1);
+const getMaxDate = () => localISODateOffset(7);
 
 export default function App() {
   const [location, setLocation] = useState(null);
@@ -61,7 +53,7 @@ export default function App() {
           setLocation={setLocation}
           date={date}
           setDate={setDate}
-          minDate={new Date().toISOString().split('T')[0]}
+          minDate={localISODate()}
           maxDate={getMaxDate()}
           radius={radius}
           setRadius={setRadius}
