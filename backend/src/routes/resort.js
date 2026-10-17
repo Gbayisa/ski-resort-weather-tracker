@@ -6,6 +6,19 @@ import { getDriveInfoBatch } from '../services/driveTime.js';
 
 const router = Router();
 
+/** GET /api/resort/search?q= — name search for pickers (home mountain). Declared before /:id. */
+router.get('/search', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (q.length < 2) return res.json({ results: [] });
+  const results = getDb()
+    .prepare(
+      `SELECT id, name, region, country FROM resorts WHERE name LIKE ?
+       ORDER BY (name LIKE ?) DESC, piste_km DESC NULLS LAST, name LIMIT 8`
+    )
+    .all(`%${q}%`, `${q}%`);
+  res.json({ results });
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;

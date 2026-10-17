@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { getDb } from '../db/database.js';
 import { haversineDistance } from './forecastUtils.js';
+import { seasonFor } from '../data/seasons.js';
 
 /**
  * "Meet riders" — solo skiers and boarders find people to ride with, grab a
@@ -14,6 +15,8 @@ import { haversineDistance } from './forecastUtils.js';
  *   check-ins expire automatically.
  * - Riders can limit visibility to women only.
  * - Chat opens only after the other rider accepts; block/report everywhere.
+ * - An Instagram handle is optional and shown only to accepted connections,
+ *   unless the rider chooses to share it with everyone at their resort.
  */
 
 export const SPORTS = ['ski', 'snowboard', 'both'];
@@ -21,7 +24,56 @@ export const GENDERS = ['woman', 'man', 'nonbinary', 'undisclosed'];
 export const LEVELS = ['beginner', 'intermediate', 'advanced', 'expert'];
 export const INTENTS = ['ride', 'coffee', 'apres'];
 export const VISIBILITIES = ['everyone', 'women'];
+/** Who sees a rider's Instagram: only riders they've connected with, or everyone at their resort. */
+export const INSTAGRAM_VISIBILITIES = ['connections', 'everyone'];
 const AVATARS = ['🦊', '🐻', '🐺', '🦉', '🐧', '🦅', '🐼', '🦌', '🐯', '🐨', '🦁', '🐸'];
+
+/** Avatar builder parts. The frontend draws them; the server only accepts known values. */
+const AVATAR_COLORS = [
+  'snow', 'ice', 'sky', 'navy', 'teal', 'mint', 'lime', 'forest', 'sun',
+  'orange', 'red', 'coral', 'pink', 'violet', 'lilac', 'sand', 'charcoal', 'night',
+];
+export const AVATAR_OPTIONS = {
+  skin: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  expression: ['smile', 'grin', 'stoked', 'wink', 'cheeky'],
+  marks: ['none', 'rosy', 'freckles'],
+  facialHair: ['none', 'stubble', 'moustache', 'beard'],
+  hair: [
+    'buzz', 'crop', 'sweep', 'straight', 'wavy', 'curly', 'afro',
+    'braids', 'ponytail', 'pigtails', 'bun', 'mohawk', 'bald',
+  ],
+  hairLength: ['short', 'medium', 'long'],
+  hairColor: [
+    'black', 'espresso', 'brown', 'auburn', 'ginger', 'honey', 'blonde',
+    'platinum', 'silver', 'pink', 'blue', 'teal', 'purple',
+  ],
+  headwear: ['helmet', 'beanie', 'pom', 'critter', 'trapper', 'cap', 'headband', 'none'],
+  hat: AVATAR_COLORS,
+  eyewear: ['goggles', 'goggles-up', 'shades', 'none'],
+  lens: ['gold', 'fire', 'rose', 'violet', 'blue', 'emerald', 'smoke', 'chrome'],
+  outfit: ['shell', 'puffer', 'anorak', 'hoodie', 'retro'],
+  pattern: ['solid', 'stripe', 'two-tone', 'chevron', 'camo'],
+  jacket: AVATAR_COLORS,
+  accent: AVATAR_COLORS,
+  pants: AVATAR_COLORS,
+  gear: ['ski', 'board'],
+  graphic: ['clean', 'stripes', 'peak', 'flame', 'stars'],
+  gearColor: AVATAR_COLORS,
+  backdrop: ['bluebird', 'dawn', 'alpenglow', 'gold', 'glacier', 'night', 'aurora', 'storm'],
+};
+export const RIDER_TAGS = [
+  'first-chair', 'powder-hound', 'park-rat', 'tree-runs', 'groomers', 'steeps',
+  'bumps', 'touring', 'apres', 'photos', 'chill-pace', 'send-it',
+];
+const MAX_TAGS = 3;
+
+export function randomAvatar(sport) {
+  const avatar = Object.fromEntries(
+    Object.entries(AVATAR_OPTIONS).map(([k, opts]) => [k, opts[crypto.randomInt(opts.length)]])
+  );
+  if (sport === 'ski' || sport === 'snowboard') avatar.gear = sport === 'ski' ? 'ski' : 'board';
+  return avatar;
+}
 
 /** Resort coordinates are the village/base; ski areas sprawl a few km around it. */
 export const CHECKIN_RADIUS_KM = 6;
@@ -67,6 +119,38 @@ function oneOf(value, allowed, field) {
   return value;
 }
 
+function validateAvatar(avatar) {
+  if (avatar == null) return null;
+  if (typeof avatar !== 'object') throw new CommunityError(400, 'invalid_profile', 'Avatar is not valid');
+  const out = {};
+  for (const [key, allowed] of Object.entries(AVATAR_OPTIONS)) {
+    if (!allowed.includes(avatar[key])) throw new CommunityError(400, 'invalid_profile', `Avatar ${key} is not valid`);
+    out[key] = avatar[key];
+  }
+  return out;
+}
+
+const cleanTags = (tags) =>
+  Array.isArray(tags) ? [...new Set(tags.filter((t) => RIDER_TAGS.includes(t)))].slice(0, MAX_TAGS) : [];
+
+// Instagram paths that look like usernames but aren't profiles
+const INSTAGRAM_RESERVED = new Set(['p', 'reel', 'reels', 'explore', 'stories', 'accounts', 'tv', 'direct']);
+
+/** Accepts "@name", "name" or a profile URL; returns the lowercase username, or null when left empty. */
+export function cleanInstagram(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const handle = raw
+    .replace(/^(?:https?:\/\/)?(?:www\.)?instagram\.com\//i, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/^@/, '')
+    .toLowerCase();
+  if (!/^[a-z0-9._]{1,30}$/.test(handle) || /^\.|\.$|\.\./.test(handle) || INSTAGRAM_RESERVED.has(handle)) {
+    throw new CommunityError(400, 'invalid_profile', 'That doesn’t look like an Instagram username');
+  }
+  return handle;
+}
+
 export function validateProfile(input = {}) {
   const name = cleanText(input.name, LIMITS.name);
   if (name.length < 2) throw new CommunityError(400, 'invalid_profile', 'Name needs at least 2 characters');
@@ -88,12 +172,21 @@ export function validateProfile(input = {}) {
     level: oneOf(input.level, LEVELS, 'level'),
     bio: cleanText(input.bio, LIMITS.bio),
     visibility,
+    avatar: validateAvatar(input.avatar),
+    tags: cleanTags(input.tags),
+    homeResortId: Number.isInteger(input.homeResortId) ? input.homeResortId : null,
+    instagram: cleanInstagram(input.instagram),
+    instagramVisibility: oneOf(input.instagramVisibility ?? 'connections', INSTAGRAM_VISIBILITIES, 'instagramVisibility'),
   };
 }
 
 // ---------- profile ----------
 
-export function publicProfile(r) {
+/** What other riders see. Instagram stays hidden until connected, unless the rider shares it with everyone. */
+export function publicProfile(r, { connected = false } = {}) {
+  const home = r.home_resort_id
+    ? getDb().prepare('SELECT id, name FROM resorts WHERE id = ?').get(r.home_resort_id) || null
+    : null;
   return {
     id: r.id,
     name: r.name,
@@ -103,33 +196,100 @@ export function publicProfile(r) {
     level: r.level,
     bio: r.bio,
     avatar: r.avatar,
+    avatarConfig: r.avatar_config ? JSON.parse(r.avatar_config) : null,
+    tags: JSON.parse(r.tags || '[]'),
+    home,
+    instagram: connected || r.instagram_visibility === 'everyone' ? r.instagram : null,
+    seasonDays: seasonStats(r).days,
     isDemo: !!r.is_demo,
   };
 }
 
-const privateProfile = (r) => ({ ...publicProfile(r), gender: r.gender, visibility: r.visibility });
+// ---------- season stats & badges ----------
+
+/** Ski seasons are counted from 1 August (northern-hemisphere season year). */
+export function seasonStart(today = new Date().toISOString().slice(0, 10)) {
+  const year = Number(today.slice(0, 4));
+  return today.slice(5) >= '08-01' ? `${year}-08-01` : `${year - 1}-08-01`;
+}
+
+export function seasonStats(rider) {
+  const db = getDb();
+  const since = seasonStart();
+  const days = db.prepare('SELECT DISTINCT day, resort_id FROM rider_days WHERE rider_id = ? AND day >= ?').all(rider.id, since);
+  const resortIds = [...new Set(days.map((d) => d.resort_id))];
+  const resorts = resortIds.length
+    ? db.prepare(`SELECT id, osm_id, name, country, lat FROM resorts WHERE id IN (${resortIds.map(() => '?').join(',')})`).all(...resortIds)
+    : [];
+  const glacierIds = new Set(resorts.filter((r) => seasonFor(r).glacier).map((r) => r.id));
+  return {
+    days: new Set(days.map((d) => d.day)).size,
+    resorts: resortIds.length,
+    ridersMet: rider.riders_met || 0,
+    glacierDays: new Set(days.filter((d) => glacierIds.has(d.resort_id)).map((d) => d.day)).size,
+    homeDays: rider.home_resort_id ? new Set(days.filter((d) => d.resort_id === rider.home_resort_id).map((d) => d.day)).size : 0,
+  };
+}
+
+const BADGES = [
+  { key: 'first-tracks', label: 'First tracks', description: 'Check in for your first day', target: 1, stat: 'days' },
+  { key: 'five-days', label: 'Five days deep', description: 'Ski five days this season', target: 5, stat: 'days' },
+  { key: 'explorer', label: 'Explorer', description: 'Ski three different resorts', target: 3, stat: 'resorts' },
+  { key: 'social', label: 'Social rider', description: 'Meet five riders', target: 5, stat: 'ridersMet' },
+  { key: 'glacier', label: 'Glacier hunter', description: 'Ski a glacier', target: 1, stat: 'glacierDays' },
+  { key: 'local', label: 'Local legend', description: 'Five days at your home mountain', target: 5, stat: 'homeDays' },
+];
+
+export function badgesFor(stats) {
+  return BADGES.map(({ stat, ...b }) => ({
+    ...b,
+    current: Math.min(b.target, stats[stat]),
+    unlocked: stats[stat] >= b.target,
+  }));
+}
+
+const privateProfile = (r) => ({
+  ...publicProfile(r, { connected: true }),
+  gender: r.gender,
+  visibility: r.visibility,
+  instagramVisibility: r.instagram_visibility,
+});
 
 /** Create (no current rider) or update a profile. Returns { rider, token? }. */
 export function saveProfile(current, input) {
   const p = validateProfile(input);
   const db = getDb();
+  if (p.homeResortId != null && !db.prepare('SELECT 1 FROM resorts WHERE id = ?').get(p.homeResortId)) {
+    throw new CommunityError(400, 'invalid_profile', 'Home mountain not found');
+  }
+  const avatarConfig = JSON.stringify(p.avatar ?? (current?.avatar_config ? JSON.parse(current.avatar_config) : randomAvatar(p.sport)));
+  const tags = JSON.stringify(p.tags);
   if (current) {
     db.prepare(
-      `UPDATE riders SET name=?, age=?, sport=?, gender=?, level=?, bio=?, visibility=?, updated_at=datetime('now')
-       WHERE id=?`
-    ).run(p.name, p.age, p.sport, p.gender, p.level, p.bio, p.visibility, current.id);
+      `UPDATE riders SET name=?, age=?, sport=?, gender=?, level=?, bio=?, visibility=?, avatar_config=?, tags=?,
+       home_resort_id=?, instagram=?, instagram_visibility=?, updated_at=datetime('now') WHERE id=?`
+    ).run(
+      p.name, p.age, p.sport, p.gender, p.level, p.bio, p.visibility, avatarConfig, tags, p.homeResortId,
+      p.instagram, p.instagramVisibility, current.id
+    );
     return { rider: privateProfile(db.prepare('SELECT * FROM riders WHERE id=?').get(current.id)) };
   }
   const token = newToken();
   const avatar = AVATARS[crypto.randomInt(AVATARS.length)];
   const { lastInsertRowid } = db
     .prepare(
-      `INSERT INTO riders (token_hash, name, age, sport, gender, level, bio, visibility, avatar)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO riders (token_hash, name, age, sport, gender, level, bio, visibility, avatar, avatar_config, tags,
+       home_resort_id, instagram, instagram_visibility)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(hashToken(token), p.name, p.age, p.sport, p.gender, p.level, p.bio, p.visibility, avatar);
+    .run(
+      hashToken(token), p.name, p.age, p.sport, p.gender, p.level, p.bio, p.visibility, avatar, avatarConfig, tags,
+      p.homeResortId, p.instagram, p.instagramVisibility
+    );
   return { rider: privateProfile(db.prepare('SELECT * FROM riders WHERE id=?').get(lastInsertRowid)), token };
 }
+
+export const riderById = (id) => getDb().prepare('SELECT * FROM riders WHERE id = ?').get(id);
 
 export function deleteRider(riderId) {
   const db = getDb();
@@ -140,7 +300,8 @@ export function deleteRider(riderId) {
 }
 
 export function me(rider) {
-  return { rider: privateProfile(rider), checkin: currentCheckin(rider.id) };
+  const stats = seasonStats(rider);
+  return { rider: privateProfile(rider), checkin: currentCheckin(rider.id), season: stats, badges: badgesFor(stats) };
 }
 
 // ---------- check-ins ----------
@@ -204,6 +365,11 @@ export function checkIn(rider, { lat, lon, intents, note, devResortId } = {}) {
     `INSERT OR REPLACE INTO checkins (rider_id, resort_id, intents, note, created_at, expires_at)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(rider.id, resort.id, JSON.stringify(cleanIntents(intents)), cleanText(note, LIMITS.note), nowIso(), expiresAt);
+  db.prepare('INSERT OR IGNORE INTO rider_days (rider_id, resort_id, day) VALUES (?, ?, ?)').run(
+    rider.id,
+    resort.id,
+    nowIso().slice(0, 10)
+  );
   return currentCheckin(rider.id);
 }
 
@@ -274,7 +440,7 @@ export function ridersAt(viewer, resortId) {
     .map((r) => {
       const conn = connectionBetween(viewer.id, r.id, Number(resortId));
       return {
-        ...publicProfile(r),
+        ...publicProfile(r, { connected: conn?.status === 'accepted' }),
         intents: JSON.parse(r.intents),
         note: r.note,
         checkedInAt: r.checked_in_at,
@@ -328,6 +494,7 @@ export function requestConnection(viewer, { toRiderId, intent }) {
   // Development only: demo riders accept and reply so the flow can be tried end to end
   if (target.is_demo && isDev()) {
     db.prepare("UPDATE connections SET status = 'accepted', updated_at = ? WHERE id = ?").run(ts, lastInsertRowid);
+    db.prepare('UPDATE riders SET riders_met = riders_met + 1 WHERE id IN (?, ?)').run(viewer.id, target.id);
     db.prepare('INSERT INTO messages (connection_id, from_rider, body, created_at) VALUES (?, ?, ?, ?)').run(
       lastInsertRowid,
       target.id,
@@ -351,7 +518,7 @@ function connectionView(viewer, c) {
     intent: c.intent,
     direction: c.from_rider === viewer.id ? 'outgoing' : 'incoming',
     createdAt: c.created_at,
-    rider: other ? publicProfile(other) : null,
+    rider: other ? publicProfile(other, { connected: c.status === 'accepted' }) : null,
     lastMessage: last ? { body: last.body, mine: last.from_rider === viewer.id, at: last.created_at } : null,
   };
 }
@@ -384,6 +551,9 @@ export function respondConnection(viewer, id, accept) {
   getDb()
     .prepare('UPDATE connections SET status = ?, updated_at = ? WHERE id = ?')
     .run(accept ? 'accepted' : 'declined', nowIso(), id);
+  if (accept) {
+    getDb().prepare('UPDATE riders SET riders_met = riders_met + 1 WHERE id IN (?, ?)').run(c.from_rider, c.to_rider);
+  }
   return connectionView(viewer, getDb().prepare('SELECT * FROM connections WHERE id = ?').get(id));
 }
 

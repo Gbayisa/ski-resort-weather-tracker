@@ -121,6 +121,15 @@ export function initDb() {
       PRIMARY KEY (blocker, blocked)
     );
 
+    -- One row per rider per resort per day checked in: powers season stats and badges.
+    -- Resort-level and deleted with the profile, like everything else.
+    CREATE TABLE IF NOT EXISTS rider_days (
+      rider_id INTEGER NOT NULL REFERENCES riders(id) ON DELETE CASCADE,
+      resort_id INTEGER NOT NULL REFERENCES resorts(id),
+      day TEXT NOT NULL,
+      PRIMARY KEY (rider_id, day, resort_id)
+    );
+
     CREATE TABLE IF NOT EXISTS reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       reporter INTEGER REFERENCES riders(id) ON DELETE SET NULL,
@@ -147,6 +156,20 @@ export function initDb() {
   ];
   for (const [name, ddl] of terrainCols) {
     if (!existingCols.includes(name)) db.exec(`ALTER TABLE resorts ADD COLUMN ${ddl}`);
+  }
+
+  // Profile customisation (avatar builder, vibe tags, home mountain) and a durable riders-met count
+  const riderCols = db.prepare('PRAGMA table_info(riders)').all().map((c) => c.name);
+  const riderAdditions = [
+    ['avatar_config', 'avatar_config TEXT'],
+    ['tags', "tags TEXT NOT NULL DEFAULT '[]'"],
+    ['home_resort_id', 'home_resort_id INTEGER REFERENCES resorts(id)'],
+    ['riders_met', 'riders_met INTEGER NOT NULL DEFAULT 0'],
+    ['instagram', 'instagram TEXT'],
+    ['instagram_visibility', "instagram_visibility TEXT NOT NULL DEFAULT 'connections'"],
+  ];
+  for (const [name, ddl] of riderAdditions) {
+    if (!riderCols.includes(name)) db.exec(`ALTER TABLE riders ADD COLUMN ${ddl}`);
   }
 
   // Forecasts track when a search last used them, so the scheduler only keeps hot ones fresh

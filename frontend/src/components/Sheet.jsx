@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 /** Bottom sheet on phones, centered dialog on larger screens. */
-export default function Sheet({ open, onClose, title, children, wide = false }) {
+export default function Sheet({ open, onClose, title, icon, children, wide = false }) {
   const backdropRef = useRef(null);
 
   // iOS Safari lays fixed elements out against the layout viewport, not the visible area
@@ -50,7 +50,10 @@ export default function Sheet({ open, onClose, title, children, wide = false }) 
       >
         <div className="sheet-handle" aria-hidden="true" />
         <header className="sheet-header">
-          <h2>{title}</h2>
+          <h2>
+            {icon}
+            {title}
+          </h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <X size={20} />
           </button>

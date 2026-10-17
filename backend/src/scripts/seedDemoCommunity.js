@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { getDb } from '../db/database.js';
-import { hashToken, CHECKIN_HOURS } from '../services/community.js';
+import { hashToken, CHECKIN_HOURS, AVATAR_OPTIONS, RIDER_TAGS } from '../services/community.js';
 import { seasonStatus } from '../data/seasons.js';
 
 /**
@@ -23,6 +23,29 @@ const DEMO_RIDERS = [
   ['Maya', 33, 'snowboard', 'woman', 'advanced', 'Après is my cardio.', '🦁'],
   ['Felix', 36, 'ski', 'undisclosed', 'advanced', 'Touring early, lifts after 10.', '🐯'],
 ];
+
+const DEMO_HAIR = {
+  woman: [['ponytail', 'long'], ['braids', 'long'], ['wavy', 'medium'], ['straight', 'long'], ['pigtails', 'medium'], ['curly', 'medium'], ['bun', 'short']],
+  man: [['crop', 'short'], ['sweep', 'short'], ['curly', 'short'], ['buzz', 'short'], ['afro', 'medium'], ['wavy', 'medium'], ['mohawk', 'short']],
+  other: [['wavy', 'short'], ['curly', 'medium'], ['crop', 'short'], ['straight', 'medium']],
+};
+
+/** Deterministic avatar per demo rider, so they look the same on every restart. */
+function demoAvatar(i, sport, gender) {
+  const base = Object.fromEntries(Object.entries(AVATAR_OPTIONS).map(([k, opts], j) => [k, opts[(i * 7 + j * 3) % opts.length]]));
+  const styles = DEMO_HAIR[gender] ?? DEMO_HAIR.other;
+  const [hair, hairLength] = styles[i % styles.length];
+  return {
+    ...base,
+    hair,
+    hairLength,
+    facialHair: gender === 'man' ? ['stubble', 'none', 'beard', 'none', 'moustache'][i % 5] : 'none',
+    eyewear: ['goggles-up', 'shades', 'none', 'goggles'][i % 4],
+    gear: sport === 'snowboard' ? 'board' : 'ski',
+    accent: base.accent === base.jacket ? 'snow' : base.accent,
+  };
+}
+const demoTags = (i) => [RIDER_TAGS[i % RIDER_TAGS.length], RIDER_TAGS[(i * 5 + 3) % RIDER_TAGS.length]];
 
 const INTENT_SETS = [['ride'], ['ride', 'coffee'], ['coffee'], ['ride', 'apres'], ['apres'], ['ride', 'coffee', 'apres']];
 const NOTES = ['Top of the main gondola at 10', 'Blue jacket, orange helmet', 'Around the summit café', '', 'Heading up at 9:30', ''];
@@ -58,6 +81,18 @@ export function seedDemoCommunity() {
        VALUES (?, ?, ?, ?, ?, ?)`
     );
     const now = Date.now();
+    const profile = db.prepare('UPDATE riders SET avatar_config = ?, tags = ?, home_resort_id = ?, riders_met = ? WHERE id = ?');
+    const day = db.prepare('INSERT OR IGNORE INTO rider_days (rider_id, resort_id, day) VALUES (?, ?, ?)');
+    ids.forEach((riderId, i) => {
+      const home = openResorts[i % openResorts.length];
+      const [, , sport, gender] = DEMO_RIDERS[i];
+      profile.run(JSON.stringify(demoAvatar(i, sport, gender)), JSON.stringify([...new Set(demoTags(i))]), home.id, i % 7, riderId);
+      // A little season history (dev only) so stats and badges have something to show
+      for (let d = 0; d < (i % 6) + 1; d++) {
+        const date = new Date(now - (d * 9 + i) * 24 * 3600 * 1000).toISOString().slice(0, 10);
+        day.run(riderId, openResorts[(i + d) % openResorts.length].id, date);
+      }
+    });
     ids.forEach((riderId, i) => {
       // Consecutive riders (a woman/man pair in DEMO_RIDERS) share a resort, cycling the biggest open ones
       const resort = openResorts[Math.floor(i / 2) % openResorts.length];

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Send, ShieldCheck } from 'lucide-react';
 import Sheet from '../Sheet.jsx';
 import { meetApi } from '../../api.js';
+import RiderAvatar from '../avatar/RiderAvatar.jsx';
+import InstagramLink from '../InstagramLink.jsx';
 
 const POLL_MS = 4000;
 
@@ -57,10 +59,20 @@ export default function ChatSheet({ connection, onClose, onSafety, toast }) {
   };
 
   return (
-    <Sheet open onClose={onClose} title={`${rider.avatar} ${rider.name}`}>
+    <Sheet
+      open
+      onClose={onClose}
+      title={rider.name}
+      icon={<RiderAvatar config={rider.avatarConfig} fallback={rider.avatar} size={34} />}
+    >
       <p className="chat-safety">
         <ShieldCheck size={16} /> Meet in busy spots — lift stations, the main lodge. Don’t share where you’re staying.
       </p>
+      {rider.instagram && (
+        <p className="chat-ig">
+          {rider.name} shared their Instagram <InstagramLink handle={rider.instagram} />
+        </p>
+      )}
       <div className="chat-list" ref={listRef} aria-live="polite">
         {messages.length === 0 && <p className="muted chat-empty">Say hi and suggest a meeting point 👋</p>}
         {messages.map((m) => (

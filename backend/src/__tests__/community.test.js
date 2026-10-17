@@ -124,3 +124,105 @@ describe('meeting up', () => {
     expect(db.prepare('SELECT COUNT(*) n FROM connections WHERE from_rider = ?').get(a.id).n).toBe(0);
   });
 });
+
+describe('profile customisation & season', () => {
+  const avatar = {
+    skin: 7, expression: 'stoked', marks: 'freckles', facialHair: 'none', hair: 'braids', hairLength: 'long',
+    hairColor: 'auburn', headwear: 'pom', hat: 'sun', eyewear: 'goggles-up', lens: 'rose', outfit: 'puffer',
+    pattern: 'chevron', jacket: 'night', accent: 'coral', pants: 'sand', gear: 'board', graphic: 'flame',
+    gearColor: 'teal', backdrop: 'aurora',
+  };
+
+  it('stores a valid avatar and rejects unknown parts', () => {
+    const { rider } = create({ name: 'Ava', avatar });
+    expect(rider.avatarConfig).toEqual(avatar);
+    expect(() => create({ avatar: { ...avatar, hat: 'plaid' } })).toThrow(/Avatar hat/);
+  });
+
+  it('gives new riders a valid random avatar when they skip the builder', () => {
+    const { rider } = create({ name: 'Rio', sport: 'snowboard' });
+    for (const [key, allowed] of Object.entries(c.AVATAR_OPTIONS)) {
+      expect(allowed).toContain(rider.avatarConfig[key]);
+    }
+    expect(rider.avatarConfig.gear).toBe('board');
+  });
+
+  it('rejects avatars with missing parts', () => {
+    const partial = { ...avatar };
+    delete partial.gear;
+    expect(() => create({ avatar: partial })).toThrow(/Avatar gear/);
+  });
+
+  it('keeps at most three known vibe tags', () => {
+    const { rider } = create({ tags: ['powder-hound', 'nonsense', 'park-rat', 'apres', 'touring'] });
+    expect(rider.tags).toEqual(['powder-hound', 'park-rat', 'apres']);
+  });
+
+  it('validates the home mountain', () => {
+    expect(create({ homeResortId: zermattId }).rider.home).toEqual({ id: zermattId, name: 'Zermatt' });
+    expect(() => create({ homeResortId: 999999 })).toThrow(/Home mountain/);
+  });
+
+  it('counts days, resorts, riders met and unlocks badges', () => {
+    const a = row(create({ name: 'Una', homeResortId: zermattId }).rider.id);
+    const b = row(create({ name: 'Vik' }).rider.id);
+    c.checkIn(a, { devResortId: zermattId });
+    c.checkIn(a, { devResortId: zermattId }); // same day twice counts once
+    c.checkIn(b, { devResortId: zermattId });
+    const conn = c.requestConnection(a, { toRiderId: b.id, intent: 'ride' });
+    c.respondConnection(b, conn.id, true);
+
+    const { season, badges } = c.me(row(a.id));
+    expect(season).toMatchObject({ days: 1, resorts: 1, ridersMet: 1, glacierDays: 1, homeDays: 1 });
+    const byKey = Object.fromEntries(badges.map((x) => [x.key, x]));
+    expect(byKey['first-tracks'].unlocked).toBe(true);
+    expect(byKey.glacier.unlocked).toBe(true); // Zermatt is a glacier resort
+    expect(byKey.explorer).toMatchObject({ unlocked: false, current: 1, target: 3 });
+    expect(c.publicProfile(row(b.id)).seasonDays).toBe(1);
+  });
+
+  it('starts the season on 1 August', () => {
+    expect(c.seasonStart('2026-10-17')).toBe('2026-08-01');
+    expect(c.seasonStart('2027-03-01')).toBe('2026-08-01');
+  });
+});
+
+describe('instagram', () => {
+  it('accepts usernames, @usernames and profile links', () => {
+    expect(c.cleanInstagram('@Lea.Skis')).toBe('lea.skis');
+    expect(c.cleanInstagram('https://www.instagram.com/lea_skis/?igsh=abc')).toBe('lea_skis');
+    expect(c.cleanInstagram('  ')).toBeNull();
+    for (const bad of ['lea skis', 'a'.repeat(31), '.lea', 'lea.', 'le..a', 'instagram.com/p/xyz']) {
+      expect(() => c.cleanInstagram(bad)).toThrow(/Instagram/);
+    }
+  });
+
+  it('lets the owner see their handle and who it is shared with', () => {
+    const { rider } = create({ name: 'Kit', instagram: '@kit.rides' });
+    expect(rider).toMatchObject({ instagram: 'kit.rides', instagramVisibility: 'connections' });
+  });
+
+  it('shows the handle only once a connection is accepted', () => {
+    const a = row(create({ name: 'Ines', instagram: 'ines.rides' }).rider.id);
+    const b = row(create({ name: 'Bo' }).rider.id);
+    c.checkIn(a, { devResortId: zermattId });
+    c.checkIn(b, { devResortId: zermattId });
+    const seen = () => c.ridersAt(row(b.id), zermattId).find((r) => r.id === a.id);
+
+    expect(seen().instagram).toBeNull();
+    const conn = c.requestConnection(row(b.id), { toRiderId: a.id, intent: 'coffee' });
+    expect(c.listConnections(row(b.id))[0].rider.instagram).toBeNull();
+    c.respondConnection(row(a.id), conn.id, true);
+    expect(seen().instagram).toBe('ines.rides');
+    expect(c.listConnections(row(b.id))[0].rider.instagram).toBe('ines.rides');
+  });
+
+  it('can be shared with everyone at the resort', () => {
+    const a = row(create({ name: 'Oli', instagram: 'oli.shreds', instagramVisibility: 'everyone' }).rider.id);
+    const b = row(create({ name: 'Pia' }).rider.id);
+    c.checkIn(a, { devResortId: zermattId });
+    c.checkIn(b, { devResortId: zermattId });
+    expect(c.ridersAt(row(b.id), zermattId).find((r) => r.id === a.id).instagram).toBe('oli.shreds');
+    expect(() => create({ instagram: 'x', instagramVisibility: 'world' })).toThrow(/instagramVisibility/);
+  });
+});

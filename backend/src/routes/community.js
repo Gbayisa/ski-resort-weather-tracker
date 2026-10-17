@@ -38,7 +38,7 @@ router.post(
   auth(false),
   handle((req) => {
     const { rider, token } = community.saveProfile(req.rider, req.body);
-    return { rider, token, checkin: community.currentCheckin(rider.id) };
+    return { ...community.me(community.riderById(rider.id)), token };
   })
 );
 

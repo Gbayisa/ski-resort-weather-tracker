@@ -33,6 +33,12 @@ export async function getResortDetail(id, date) {
   return res.json();
 }
 
+export async function searchResorts(query, signal) {
+  const res = await fetch(`${API_BASE}/resort/search?q=${encodeURIComponent(query)}`, { signal });
+  if (!res.ok) throw new Error('Resort search failed');
+  return (await res.json()).results;
+}
+
 export async function getHealth() {
   const res = await fetch(`${API_BASE}/health`);
   if (!res.ok) throw new Error('Health check failed');

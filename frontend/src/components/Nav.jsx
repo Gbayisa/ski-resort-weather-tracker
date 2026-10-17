@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Compass, Users, User, Snowflake } from 'lucide-react';
+import RiderAvatar from './avatar/RiderAvatar.jsx';
 
 const TABS = [
   { key: 'discover', label: 'Discover', icon: Compass },
@@ -52,7 +53,7 @@ export function TopBar({ route, navigate, me, overHero }) {
         ))}
       </nav>
       <a className="topbar-avatar" href="#/profile" aria-label="Your profile">
-        {me?.rider?.avatar || <User size={18} />}
+        {me?.rider ? <RiderAvatar config={me.rider.avatarConfig} fallback={me.rider.avatar} size={40} /> : <User size={18} />}
       </a>
     </header>
   );
@@ -94,7 +95,11 @@ export function BottomNav({ route, me }) {
           aria-current={route === key ? 'page' : undefined}
         >
           <span className="bottomnav-icon">
-            {key === 'profile' && me?.rider ? <span className="bottomnav-avatar">{me.rider.avatar}</span> : <Icon size={22} />}
+            {key === 'profile' && me?.rider ? (
+              <RiderAvatar config={me.rider.avatarConfig} fallback={me.rider.avatar} size={26} className="bottomnav-avatar" />
+            ) : (
+              <Icon size={22} />
+            )}
             {key === 'meet' && me?.checkin && <span className="live-dot" />}
           </span>
           {short || label}

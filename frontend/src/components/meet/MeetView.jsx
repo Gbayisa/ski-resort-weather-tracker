@@ -19,8 +19,11 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { meetApi } from '../../api.js';
+import RiderAvatar from '../avatar/RiderAvatar.jsx';
+import { RIDER_TAGS } from '../avatar/avatarParts.js';
 import { getCurrentPosition } from '../../utils/geo.js';
 import ChatSheet from './ChatSheet.jsx';
+import InstagramLink from '../InstagramLink.jsx';
 
 export const INTENTS = {
   ride: { label: 'Ride together', short: 'Ride', icon: MountainSnow },
@@ -29,6 +32,14 @@ export const INTENTS = {
 };
 export const SPORT = { ski: '⛷️ Skier', snowboard: '🏂 Snowboarder', both: '⛷️🏂 Ski & board' };
 export const LEVEL = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced', expert: 'Expert' };
+
+const INTRO_AVATARS = [
+  { backdrop: 'bluebird', skin: 1, headwear: 'helmet', hat: 'coral', lens: 'gold', jacket: 'night', pattern: 'stripe' },
+  { backdrop: 'alpenglow', skin: 4, headwear: 'beanie', hat: 'sun', lens: 'blue', jacket: 'violet', pattern: 'solid' },
+  { backdrop: 'glacier', skin: 2, headwear: 'helmet', hat: 'snow', lens: 'rose', jacket: 'red', pattern: 'block' },
+  { backdrop: 'dawn', skin: 0, headwear: 'beanie', hat: 'mint', lens: 'violet', jacket: 'sky', pattern: 'stripe' },
+  { backdrop: 'gold', skin: 5, headwear: 'helmet', hat: 'night', lens: 'emerald', jacket: 'orange', pattern: 'block' },
+];
 
 const timeOf = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -77,9 +88,9 @@ function MeetIntro({ onStart }) {
     <div className="page meet-intro">
       <section className="meet-hero glass">
         <div className="avatar-cluster" aria-hidden="true">
-          {['🦊', '🐻', '🦉', '🐧', '🦌'].map((a, i) => (
-            <span key={a} style={{ '--i': i }}>
-              {a}
+          {INTRO_AVATARS.map((config, i) => (
+            <span key={i} style={{ '--i': i }}>
+              <RiderAvatar config={config} size={54} />
             </span>
           ))}
         </div>
@@ -190,9 +201,7 @@ function CheckIn({ me, setMe, toast }) {
   return (
     <div className="page">
       <section className="checkin-card glass">
-        <span className="big-avatar" aria-hidden="true">
-          {me.rider.avatar}
-        </span>
+        <RiderAvatar config={me.rider.avatarConfig} fallback={me.rider.avatar} size={84} className="title-avatar" />
         <h1>Hey {me.rider.name}, on the mountain?</h1>
         <p className="muted">Check in and riders at your resort can find you for the next 9 hours.</p>
 
@@ -357,7 +366,9 @@ function OnMountain({ me, setMe, toast }) {
           <h2>Requests</h2>
           {incoming.map((c) => (
             <div className="request glass" key={c.id}>
-              <span className="avatar">{c.rider.avatar}</span>
+              <span className="avatar">
+                <RiderAvatar config={c.rider.avatarConfig} fallback={c.rider.avatar} size={42} />
+              </span>
               <span className="request-text">
                 <strong>{c.rider.name}</strong> wants to {INTENTS[c.intent].label.toLowerCase()}
               </span>
@@ -377,7 +388,9 @@ function OnMountain({ me, setMe, toast }) {
           <h2>Your chats</h2>
           {chats.map((c) => (
             <button className="chat-row glass" key={c.id} onClick={() => setChat(c)}>
-              <span className="avatar">{c.rider.avatar}</span>
+              <span className="avatar">
+                <RiderAvatar config={c.rider.avatarConfig} fallback={c.rider.avatar} size={42} />
+              </span>
               <span className="chat-row-text">
                 <strong>{c.rider.name}</strong>
                 <small>{c.lastMessage ? `${c.lastMessage.mine ? 'You: ' : ''}${c.lastMessage.body}` : 'Say hi 👋'}</small>
@@ -455,7 +468,9 @@ function RiderCard({ rider, index, connection, onWave, onRespond, onOpenChat, on
   return (
     <article className={`rider-card glass level-${rider.level}`} style={{ '--i': index }}>
       <header>
-        <span className="avatar avatar-lg">{rider.avatar}</span>
+        <span className="avatar avatar-lg">
+          <RiderAvatar config={rider.avatarConfig} fallback={rider.avatar} size={56} />
+        </span>
         <div className="rider-id">
           <h3>
             {rider.name}, {rider.age}
@@ -475,6 +490,22 @@ function RiderCard({ rider, index, connection, onWave, onRespond, onOpenChat, on
           </div>
         </details>
       </header>
+      {(rider.tags?.length > 0 || rider.home || rider.seasonDays > 0 || rider.instagram) && (
+        <div className="rider-meta">
+          <InstagramLink handle={rider.instagram} />
+          {rider.tags?.map((t) => (
+            <span key={t} className="vibe-tag is-static">
+              {RIDER_TAGS[t] || t}
+            </span>
+          ))}
+          {rider.home && <span className="rider-fact">Local at {rider.home.name}</span>}
+          {rider.seasonDays > 0 && (
+            <span className="rider-fact">
+              {rider.seasonDays} day{rider.seasonDays === 1 ? '' : 's'} this season
+            </span>
+          )}
+        </div>
+      )}
       {rider.bio && <p className="rider-bio">{rider.bio}</p>}
       {rider.note && (
         <p className="rider-note">
