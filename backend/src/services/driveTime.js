@@ -10,7 +10,11 @@ import { haversineDistance } from './forecastUtils.js';
  * SQLite for 7 days (roads don't change often) and any failure falls back to a
  * clearly-labeled estimate (haversine × winding factor / blended average speed).
  */
-const OSRM_TABLE_URL = 'https://router.project-osrm.org/table/v1/driving';
+// The public demo server is rate-limited and best-effort; set OSRM_URL to a
+// self-hosted or commercial OSRM-compatible server for production traffic.
+const OSRM_BASE = (process.env.OSRM_URL || 'https://router.project-osrm.org').replace(/\/$/, '');
+const OSRM_TABLE_URL = `${OSRM_BASE}/table/v1/driving`;
+const USER_AGENT = 'PowderRadar/1.0 (ski resort weather tracker)';
 const OSRM_TIMEOUT_MS = 6000;
 const OSRM_MAX_LOCATIONS = 80; // demo server caps table requests at 100 coords
 const ROUTE_CACHE_TTL_DAYS = 7;
@@ -108,7 +112,7 @@ async function fetchOsrmTable(originLat, originLon, resorts) {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), OSRM_TIMEOUT_MS);
-      const res = await fetch(url, { signal: controller.signal });
+      const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': USER_AGENT } });
       clearTimeout(timer);
       if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
 
