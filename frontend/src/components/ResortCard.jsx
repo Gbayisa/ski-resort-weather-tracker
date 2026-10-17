@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { buildDirectionsUrl } from '../utils/maps.js';
 
-export default function ResortCard({ resort, date }) {
+export default function ResortCard({ resort, origin, date }) {
   const [altitude, setAltitude] = useState('mid');
+  const directionsUrl = buildDirectionsUrl(resort, origin);
 
   const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short',
@@ -39,9 +41,16 @@ export default function ResortCard({ resort, date }) {
         </div>
         <div className="resort-badges">
           {resort.driveTimeMin != null && (
-            <span className="resort-drive-badge" title={driveTitle(resort)}>
+            <a
+              href={directionsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="resort-drive-badge"
+              title={driveTitle(resort)}
+              aria-label={`${formatDriveTime(resort.driveTimeMin, resort.driveSource)} drive — open directions to ${resort.name} in Google Maps`}
+            >
               🚗 {formatDriveTime(resort.driveTimeMin, resort.driveSource)}
-            </span>
+            </a>
           )}
           <span className="resort-distance" title="Road distance (straight line in parentheses)">
             🛣️ {resort.driveDistanceKm ?? resort.distance} km
@@ -127,16 +136,15 @@ export default function ResortCard({ resort, date }) {
       )}
 
       <div className="resort-actions">
-        {resort.googleMapsUrl && (
-          <a
-            href={resort.googleMapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="resort-link maps-link"
-          >
-            🗺️ Directions in Google Maps
-          </a>
-        )}
+        <a
+          href={directionsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="resort-link maps-link"
+          aria-label={`Open driving directions to ${resort.name} in Google Maps`}
+        >
+          🧭 {origin?.fromDevice ? 'Navigate with Google Maps' : 'Directions in Google Maps'}
+        </a>
         {resort.website && (
           <a
             href={resort.website}
@@ -206,9 +214,11 @@ function formatDriveTime(minutes, source) {
 }
 
 function driveTitle(resort) {
-  return resort.driveSource === 'estimate'
-    ? 'Estimated drive time (routing service unavailable)'
-    : 'Drive time via road network (typical traffic not included)';
+  const source =
+    resort.driveSource === 'estimate'
+      ? 'Estimated drive time (routing service unavailable)'
+      : 'Drive time via road network (typical traffic not included)';
+  return `${source} — tap for Google Maps directions`;
 }
 
 function HourlyEntry({ entry, altitude }) {

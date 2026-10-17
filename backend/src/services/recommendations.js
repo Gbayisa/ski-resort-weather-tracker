@@ -1,7 +1,7 @@
 import { getDb } from '../db/database.js';
 import { haversineDistance } from './forecastUtils.js';
 import { getWeatherForResort, ensureForecasts } from './weatherCache.js';
-import { getDriveInfoBatch, buildGoogleMapsUrl } from './driveTime.js';
+import { getDriveInfoBatch } from './driveTime.js';
 
 /**
  * Find nearby resorts within radius that meet snowfall threshold, sorted by distance.
@@ -55,7 +55,6 @@ export async function getRecommendations({ lat, lon, date, radiusKm = 200, minSn
         website: resort.website,
         distance: resort.distance,
         terrain: buildTerrain(resort),
-        googleMapsUrl: buildGoogleMapsUrl(lat, lon, resort.lat, resort.lon),
         forecastDate: date,
         daySnowfall: weather.daySnowfall,
         daySnowfallMid: weather.daySnowfallMid,

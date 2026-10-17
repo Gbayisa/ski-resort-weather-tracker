@@ -37,16 +37,6 @@ export function estimateDrive(crowKm) {
   };
 }
 
-/** Google Maps directions deep link — no API key required. */
-export function buildGoogleMapsUrl(originLat, originLon, destLat, destLon) {
-  return (
-    'https://www.google.com/maps/dir/?api=1' +
-    `&origin=${originLat},${originLon}` +
-    `&destination=${destLat},${destLon}` +
-    '&travelmode=driving'
-  );
-}
-
 /**
  * Get drive info for many resorts at once.
  * Returns a Map of resort id → { distanceKm, durationMin, source }.

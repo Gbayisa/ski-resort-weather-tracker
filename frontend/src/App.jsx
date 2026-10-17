@@ -17,6 +17,8 @@ export default function App() {
   const [radius, setRadius] = useState(200);
   const [minSnowfall, setMinSnowfall] = useState(0);
   const [results, setResults] = useState(null);
+  // The location the current results were computed from (drive times + directions origin)
+  const [searchedLocation, setSearchedLocation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searched, setSearched] = useState(false);
@@ -35,6 +37,7 @@ export default function App() {
         minSnowfall,
       });
       setResults(data.results);
+      setSearchedLocation(location);
     } catch (err) {
       setError(err.message || 'Something went wrong');
       setResults([]);
@@ -69,6 +72,7 @@ export default function App() {
 
         <ResultsList
           results={results}
+          origin={searchedLocation}
           loading={loading}
           searched={searched}
           date={date}

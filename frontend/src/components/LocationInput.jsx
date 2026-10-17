@@ -28,9 +28,10 @@ export default function LocationInput({ location, setLocation }) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocation({
-          name: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`,
+          name: 'My current location',
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
+          fromDevice: true,
         });
         setGeoLoading(false);
         clearResults();

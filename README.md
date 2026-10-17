@@ -93,7 +93,7 @@ The Vite dev server proxies `/api` requests to the backend automatically.
 |----------|--------|-------------|
 | `GET /api/health` | GET | App status + resort/cache counts |
 | `GET /api/geocoding/search?q=...` | GET | Location search (min 2 chars) |
-| `GET /api/recommend?lat=...&lon=...&date=...&radius=...&minSnowfall=...` | GET | Resort recommendations (includes `driveTimeMin`, `driveDistanceKm`, `driveSource`, `terrain`, `googleMapsUrl`) |
+| `GET /api/recommend?lat=...&lon=...&date=...&radius=...&minSnowfall=...` | GET | Resort recommendations (includes `driveTimeMin`, `driveDistanceKm`, `driveSource`, `terrain`) |
 | `GET /api/resort/:id?date=...&lat=...&lon=...` | GET | Single resort detail with forecast (`lat`/`lon` optional — adds drive info) |
 
 ## Project Structure

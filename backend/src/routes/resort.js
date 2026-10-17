@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { getWeatherForResort } from '../services/weatherCache.js';
 import { buildTerrain } from '../services/recommendations.js';
-import { getDriveInfoBatch, buildGoogleMapsUrl } from '../services/driveTime.js';
+import { getDriveInfoBatch } from '../services/driveTime.js';
 
 const router = Router();
 
@@ -34,7 +34,6 @@ router.get('/:id', async (req, res) => {
         driveDistanceKm: info.distanceKm,
         driveTimeMin: info.durationMin,
         driveSource: info.source,
-        googleMapsUrl: buildGoogleMapsUrl(originLat, originLon, resort.lat, resort.lon),
       };
     }
 

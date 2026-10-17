@@ -1232,3 +1232,131 @@ body {
 .altitude-btn:hover {
   transform: translateY(-1px);
 }
+
+/* ============================================================
+   MOBILE & TOUCH — must stay last so it overrides the redesign
+   ============================================================ */
+
+/* Snowfall canvas: % of the fixed box, not vh (iOS vh includes the collapsing toolbar) */
+.snowfall-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* iOS Safari zooms the whole page when focusing an input under 16px */
+.search-field input,
+.search-field select {
+  font-size: 16px;
+}
+
+/* iOS renders date inputs centered and shrunk; normalize (feature query targets iOS only) */
+@supports (-webkit-touch-callout: none) {
+  .search-field input[type='date'] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 2.75rem;
+    display: block;
+  }
+  .search-field input[type='date']::-webkit-date-and-time-value {
+    text-align: left;
+  }
+}
+
+/* Drive badge is now a link to Google Maps */
+a.resort-drive-badge {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+a, button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch screens: no sticky hover lifts; give press feedback instead */
+@media (hover: none) {
+  .resort-card:hover {
+    transform: none;
+    box-shadow: 0 2px 6px rgba(11, 27, 51, 0.06), 0 12px 32px -18px rgba(11, 27, 51, 0.25);
+  }
+  .btn-search:hover:not(:disabled),
+  .maps-link:hover,
+  .altitude-btn:hover {
+    transform: none;
+  }
+  .maps-link:active,
+  .btn-search:active,
+  a.resort-drive-badge:active,
+  .altitude-btn:active {
+    transform: scale(0.97);
+  }
+}
+
+@media (max-width: 600px) {
+  .hero {
+    padding: 3rem 1rem 6rem;
+  }
+  .hero-icon {
+    font-size: 2.4rem;
+  }
+  .hero h1 {
+    font-size: 2.6rem;
+  }
+  .hero-tagline {
+    font-size: 0.7rem !important;
+    letter-spacing: 0.22em;
+  }
+  .hero p {
+    font-size: 0.95rem;
+  }
+  /* Keep peak proportions on narrow screens: draw the range wider than the viewport */
+  .hero-mountains {
+    width: 220%;
+    left: -60%;
+    height: 34%;
+  }
+  .search-panel {
+    margin-top: -3rem;
+  }
+
+  /* Cards: badges on their own row, primary action full-width and thumb-sized */
+  .resort-badges {
+    width: 100%;
+  }
+  .resort-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .maps-link {
+    text-align: center;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+  }
+  .resort-actions .resort-link:not(.maps-link) {
+    text-align: center;
+    padding: 0.5rem 0;
+  }
+  a.resort-drive-badge {
+    min-height: 32px;
+  }
+  .altitude-btn {
+    min-height: 40px;
+  }
+  .terrain-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  /* Momentum scrolling + snap for the 24h strip */
+  .hourly-timeline {
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+  .hourly-entry {
+    scroll-snap-align: start;
+  }
+}

@@ -1,6 +1,6 @@
 import ResortCard from './ResortCard.jsx';
 
-export default function ResultsList({ results, loading, searched, date }) {
+export default function ResultsList({ results, origin, loading, searched, date }) {
   if (loading) {
     return (
       <div className="loading">
@@ -41,7 +41,7 @@ export default function ResultsList({ results, loading, searched, date }) {
         </span>
       </div>
       {results.map((resort) => (
-        <ResortCard key={resort.id} resort={resort} date={date} />
+        <ResortCard key={resort.id} resort={resort} origin={origin} date={date} />
       ))}
     </div>
   );
