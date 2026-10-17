@@ -1,223 +1,153 @@
-# 🏔️ Ski Resort Weather Tracker
+# ⛷️ PowderRadar
 
-A local MVP website that helps users find ski resorts near them with the best snow conditions on a chosen future date.
+**Your perfect ski day in three taps.** PowderRadar ranks ~3,700 ski areas worldwide — from the big
+names to local hills — by real drive time and live snow conditions, and lets solo skiers and
+snowboarders meet other riders on the mountain.
 
-## Features
+## What it does
 
-- **Location search** — type a city/zip code or use browser geolocation
-- **Date picker** — select any date up to 16 days ahead
-- **Smart filtering** — adjustable search radius and minimum snowfall threshold
-- **Resort ranking** — sorted by proximity, filtered by expected snowfall
-- **Detailed forecasts** — morning (6am–12pm) and afternoon (12pm–6pm) blocks showing:
-  - Snowfall (cm)
-  - Wind speed (km/h)
-  - Visibility (label + numeric)
-  - Sky condition (sunny / partly cloudy / cloudy)
-- **3-day snowfall history** for each resort
-- **Live weather data** from [Open-Meteo](https://open-meteo.com/)
-- **294 ski resorts** seeded from OpenStreetMap-derived data (worldwide, 39 countries)
-- **Background jobs** for cache warming and cleanup
-- **Placeholder ad slots** (AdSense-ready)
-- **Mobile responsive** design
-- **OSM and Open-Meteo attribution** in footer
+### Discover — built for the lazy skier
+Open the app, tap three times, go skiing. Your starting point and choices are remembered, and results
+re-rank instantly on every tap.
 
-## Tech Stack
+1. **When** — *Day* (chips for the next 8 days, each showing the best snow and score, best day crowned),
+   *Weekend* (this Sat–Sun; rolls to next weekend on Sundays) or *Week* (the next 7 days).
+2. **How far** — *Short drive* (≤ 1h 30), *Happy to drive for better* (≤ 2h 30) or *I want the best* (≤ 4h).
+   Real road drive times, not straight-line distance. Defaults follow trip length (day → short, week → best).
+3. **What kind of day** — *Groomer Day* (sunshine, calm, comfortable temps, blue/red-heavy terrain),
+   *All Mountain* (deep base, a refresh, big area) or *Powder Day* (fresh snow overnight, cold, steeps).
+
+Every resort gets a **match score** (conditions weighed against drive time for your drive group), a
+**top pick**, plain-English reasons ("24 cm fresh overnight", "6 h of sunshine", "58% black & expert"),
+estimated **snow cover** at base/mid/peak, fresh snow, sun, wind, temperature, terrain split, an
+on-demand hour-by-hour forecast and one-tap **Google Maps navigation**.
+
+Built-in judgement:
+- **Season-aware** — closed resorts are never recommended; glaciers (Zermatt, Sölden, Kaprun…) count as open
+  and are judged on the upper mountain. Off-season, it tells you when resorts near you typically open.
+- **Auto-widen** — nothing open in your drive range? It shows the best within 4 h and says so.
+- **Powder alerts** — fresh snow ≥ 15 cm in range surfaces a one-tap switch to *Powder Day*.
+- **Car-free villages** — Zermatt, Saas-Fee, Wengen and Mürren route to where you leave the car (Täsch,
+  the Saas-Fee car park, Lauterbrunnen).
+- **Forecast confidence** — labelled high / medium / low by days ahead.
+
+### Meet riders — never ski alone
+Solo on the mountain? Make a 30-second profile (first name, age, ski/snowboard, gender, level, short bio),
+check in at your resort, and wave at riders there to **ride together**, **grab a coffee** or go for **après**.
+Chat opens when both say yes.
+
+**Safety model (enforced server-side):**
+- 18+ only. No photos, no surnames, no email or phone number.
+- **Resort-level location only** — GPS is used once to find which resort you're at (within 6 km) and is
+  never stored or shown.
+- You only see riders at a resort **while you're checked in there yourself**, so nobody can browse who
+  is where from home. Check-ins expire after 9 hours.
+- Women can choose **women-only visibility**.
+- Block and report everywhere (reporting also blocks); delete your profile and all data at any time.
+- Requests are rate-limited (20/day); chats are deleted after 7 days.
+
+In development, demo riders (badged "Demo") are checked in at open resorts and auto-reply, and a
+**dev-only check-in simulator** lets you try the flow without being at a resort.
+
+### Works on phones
+Phone-first layout with a bottom tab bar, safe-area support (notch / home bar), 16 px inputs (no iOS
+zoom-on-focus), touch-friendly targets and no sticky hover effects. Verified in iOS Safari (iPhone 16
+simulator, including Google Maps hand-off) and Android Chrome (Blink, emulated Pixel at 375 px).
+
+## Tech stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18 + Vite |
+| Frontend | React 18 + Vite, lucide-react icons, hand-written CSS design system |
 | Backend | Node.js + Express |
-| Database | SQLite (via better-sqlite3) |
-| Background Jobs | node-cron |
-| Weather API | Open-Meteo (free, no API key needed) |
-| Geocoding | Open-Meteo Geocoding API |
-| Distance | Haversine formula |
+| Database | SQLite (better-sqlite3) |
+| Jobs | node-cron (forecast refresh every 3 h, cache/chat cleanup every 6 h) |
+| Weather | Open-Meteo forecast API (batched multi-location requests) |
+| Geocoding | Open-Meteo geocoding API |
+| Drive times | OSRM `table` API, cached 7 days, labelled estimate fallback |
+| Hero video | Mixkit stock footage (free commercial licence), 720p |
 
-## Quick Start
+## Quick start
 
-### Prerequisites
-
-- **Node.js 18+** (tested with v24)
-- **npm 9+**
-
-### 1. Install Dependencies
+Requires Node.js 18+.
 
 ```bash
-# Install backend dependencies
-cd backend && npm install && cd ..
-
-# Install frontend dependencies
-cd frontend && npm install && cd ..
+cd backend && npm install && npm run dev      # API on http://localhost:3001 (seeds resorts + demo riders)
+cd frontend && npm install && npm run dev     # App on http://localhost:5173 (proxies /api)
 ```
 
-### 2. Seed Resort Data
+Tests: `npm test` in `backend/` (103 tests) and `frontend/` (35 tests).
 
-```bash
-cd backend
-npm run seed
-```
+## Configuration
 
-This creates a SQLite database with 294 ski resorts worldwide (39 countries).
+| Variable | Where | Purpose |
+|----------|-------|---------|
+| `OPEN_METEO_API_KEY` | backend | Switches to Open-Meteo's commercial endpoint (required once the site is commercial, e.g. shows ads) |
+| `OSRM_URL` | backend | OSRM-compatible routing server; defaults to the public demo server (not for production traffic) |
+| `DEMO_COMMUNITY=off` | backend | Disables development demo riders (they never run when `NODE_ENV=production`) |
+| `DB_PATH` | backend | SQLite file path (`:memory:` is used by tests) |
+| `VITE_API_BASE_URL` | frontend build | API base when the frontend is hosted separately (default `/api`) |
+| `VITE_ADSENSE_CLIENT` | frontend build | Enables AdSense units (otherwise no ad slots render at all) |
 
-> **Note:** The seed runs automatically on every backend startup (`npm start` / `npm run dev`), so you only need to run it explicitly if you want to reset data.
+## API
 
-### 3. Start the Backend
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/discover?lat&lon&today&dates&trip&drive&style` | Ranked resorts, outlook, powder alert, notices |
+| `GET /api/resort/:id?date=` | Hour-by-hour forecast for one resort and date |
+| `GET /api/geocoding/search?q=` | Town search |
+| `GET /api/health` | Status, resort count, fresh forecasts |
+| `/api/community/*` | Profile, check-in, riders at a resort, connections, chat, block, report (Bearer token) |
 
-```bash
-cd backend
-npm run dev
-```
+`today` and `dates` (YYYY-MM-DD) come from the client so trips follow the user's local calendar.
 
-Backend runs on **http://localhost:3001**
+## How it works
 
-### 4. Start the Frontend (new terminal)
+**Conditions** (`backend/src/services/conditions.js`): fresh snow is measured like snow reports (the 24 h /
+48 h before lifts open at 08:00); ski hours are 09:00–16:59; snowfall is re-derived per altitude from the
+lapse rate. Snow cover scales the model's grid-cell depth with altitude but never below what recent
+snowfall at that altitude implies. Each style has its own weighted score; rain at mid-mountain is
+penalised; weekend and week trips blend daily scores (weeks also reward bigger ski areas).
 
-```bash
-cd frontend
-npm run dev
-```
+**Seasons** (`backend/src/data/seasons.js`): typical season windows per region plus overrides for glaciers
+and early openers. These are typical dates — the UI never presents them as guaranteed.
 
-Frontend runs on **http://localhost:5173** — open this in your browser.
+**Catalogue** (`backend/src/data/skiAreas.json`, built by `npm run import:skiareas`): 297 hand-curated
+resorts plus ~3,440 operating ski areas from [OpenSkiMap](https://openskimap.org/) with at least 1 km of
+runs (or listed on skimap.org). Each area's drive-to point is its lowest lift station; umbrella domains
+and lift-pass alliances (Dolomiti Superski, Les Trois Vallées…) are dropped in favour of their member
+areas; curated resorts get terrain stats from their matching area. To refresh, download
+`ski_areas.geojson` and `lifts.geojson` from `https://tiles.openskimap.org/geojson/` and run
+`node src/scripts/importOpenSkiMap.js <ski_areas> <lifts>`.
 
-The Vite dev server proxies `/api` requests to the backend automatically.
+**Caching & cost**: one forecast per resort covers every date (12 days per location, so each counts as
+a single Open-Meteo call). Only resorts in season are fetched. A search fetches at most 150 missing
+forecasts inline (waiting ≤ 8 s) and queues the rest, paced at ~375 locations/minute; the app re-asks
+until `pendingForecasts` is 0. The scheduler keeps forecasts used in the last 24 h fresh every 3 h.
+Cost follows demand: the hard ceiling (every in-season area viewed all day) is ~30k calls/day, within
+Open-Meteo's $29/month Standard plan (1M calls); typical use is far lower.
 
-## API Endpoints
+## Launch checklist
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `GET /api/health` | GET | App status + resort/cache counts |
-| `GET /api/geocoding/search?q=...` | GET | Location search (min 2 chars) |
-| `GET /api/recommend?lat=...&lon=...&date=...&radius=...&minSnowfall=...` | GET | Resort recommendations |
-| `GET /api/resort/:id?date=...` | GET | Single resort detail with forecast |
+- **Hosting & storage** — `render.yaml` deploys one service (Express serves the built frontend). Render's
+  free plan has an ephemeral disk and sleeps after 15 min idle: community profiles and chats would be
+  wiped on every deploy/restart and the forecast job pauses while asleep. For launch, use a paid instance
+  with a persistent disk (or move community data to a managed database).
+- **Accounts** — riders are identified by a device token (only its hash is stored). Before a public launch,
+  add verified sign-in (Apple / Google / phone) so bans and reports stick to a person, plus a privacy
+  policy and moderation process for reports.
+- **Weather licence** — free Open-Meteo is non-commercial and throttles bursts. Running ads makes the
+  site commercial: subscribe to Open-Meteo's Standard plan ($29/month, 1M calls, commercial licence,
+  dedicated capacity) and set `OPEN_METEO_API_KEY` — no code changes.
+- **Routing** — point `OSRM_URL` at a self-hosted or commercial OSRM-compatible server.
+- **Video** — the hero streams from Mixkit's CDN; self-host the three 720p clips for reliability.
+- **Ads (EU)** — AdSense needs a Google-certified consent banner for EU/EEA/UK/CH traffic.
 
-## Project Structure
+## Data & attribution
 
-```
-ski-resort-weather-tracker/
-├── backend/
-│   ├── src/
-│   │   ├── index.js              # Express server entry
-│   │   ├── db/
-│   │   │   └── database.js       # SQLite setup & schema
-│   │   ├── routes/
-│   │   │   ├── health.js         # Health check endpoint
-│   │   │   ├── geocoding.js      # Location search proxy
-│   │   │   ├── recommend.js      # Resort recommendations
-│   │   │   └── resort.js         # Resort detail
-│   │   ├── services/
-│   │   │   ├── forecastUtils.js   # Haversine, forecast parsing
-│   │   │   ├── openMeteo.js       # Open-Meteo API client
-│   │   │   ├── weatherCache.js    # Weather caching layer
-│   │   │   └── recommendations.js # Recommendation engine
-│   │   ├── jobs/
-│   │   │   └── scheduler.js       # Background job scheduler
-│   │   └── scripts/
-│   │       └── seedResorts.js     # Resort database seeder
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── main.jsx
-│   │   ├── App.jsx
-│   │   ├── api.js
-│   │   ├── index.css
-│   │   ├── hooks/
-│   │   │   └── useGeocoding.js
-│   │   └── components/
-│   │       ├── Hero.jsx
-│   │       ├── SearchPanel.jsx
-│   │       ├── LocationInput.jsx
-│   │       ├── ResultsList.jsx
-│   │       ├── ResortCard.jsx
-│   │       ├── ForecastBlock.jsx
-│   │       ├── AdSlot.jsx
-│   │       └── Footer.jsx
-│   ├── index.html
-│   ├── vite.config.js
-│   └── package.json
-└── README.md
-```
-
-## Environment Variables
-
-No environment variables are required for **local development**. The Vite dev proxy forwards `/api` requests to the backend automatically.
-
-### Production (Render / static hosting)
-
-When the frontend is deployed as a **static site** (e.g. on Render), the Vite proxy is no longer available. You must tell the frontend where the backend lives by setting `VITE_API_BASE_URL` **at build time**:
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `VITE_API_BASE_URL` | Full URL of the backend API including `/api` | `https://ski-resort-api.onrender.com/api` |
-
-See `frontend/.env.example` for reference.
-
-### Deploying to Render
-
-A `render.yaml` Blueprint is included in the repo root to configure both services automatically.
-
-1. Connect the repository to [Render](https://render.com) and select **New → Blueprint**.
-2. Render will create two services: `ski-resort-api` (Node web service) and `ski-resort-frontend` (static site).
-3. After the **first** deploy, copy the URL of the `ski-resort-api` service (e.g. `https://ski-resort-api.onrender.com`).
-4. In the Render dashboard, open `ski-resort-frontend` → **Environment** → set `VITE_API_BASE_URL` to `https://<your-ski-resort-api>.onrender.com/api`.
-5. Trigger a **Manual Deploy** of the frontend so the new env var is compiled into the static bundle.
-
-> ⚠️ `VITE_API_BASE_URL` is a **build-time** variable — it is compiled into the JavaScript bundle by Vite. Changing it in the dashboard requires a rebuild/redeploy of the frontend to take effect.
-
-## How It Works
-
-### Forecast Logic
-
-- **Morning** = hours 06:00–11:59 local resort time
-- **Afternoon** = hours 12:00–17:59 local resort time
-- Snowfall is **summed** across the time block
-- Wind speed is **averaged** across the time block
-- Visibility uses the **worst** (minimum) value in the period
-- Sky condition is derived from **average cloud cover**:
-  - Sunny: < 25% cloud cover
-  - Partly Cloudy: 25–70%
-  - Cloudy: > 70%
-- Visibility labels:
-  - Low: < 1 km
-  - Medium: 1–5 km
-  - High: > 5 km
-
-### Caching
-
-- Weather data is cached in SQLite with a 3-hour TTL
-- Background jobs warm the cache every 2 hours for upcoming dates
-- Expired cache entries are cleaned every 6 hours
-
-### Resort Discovery
-
-The MVP uses a seeded database of 294 resorts across 39 countries. The resort data is automatically re-seeded on every backend startup (idempotent — uses `INSERT OR IGNORE`). In a future version, data could be refreshed from OpenStreetMap's Overpass API using winter sports tags (`sport=skiing`, `landuse=winter_sports`, etc.).
-
-## Production Notes
-
-### AdSense Integration
-
-Ad placeholder slots are already in the layout. To activate:
-
-1. Sign up for [Google AdSense](https://www.google.com/adsense/)
-2. Replace `<AdSlot />` placeholder content with your AdSense `<ins>` tags
-3. Add the AdSense script to `index.html`:
-   ```html
-   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXX" crossorigin="anonymous"></script>
-   ```
-
-### EU Consent (CMP)
-
-For EU/EEA/UK/Switzerland traffic with AdSense:
-
-1. Integrate a [Google-certified CMP](https://support.google.com/adsense/answer/13554116)
-2. Display cookie consent banners before loading personalized ads
-3. Use Google's Consent Mode v2 for compliant signal handling
-
-### Open-Meteo Commercial Use
-
-Sites with advertising are considered commercial use under Open-Meteo's terms.
-For production with ads, purchase an [Open-Meteo API subscription](https://open-meteo.com/en/pricing).
-
-## License
-
-This project is for local development and testing. See attribution requirements for
-Open-Meteo and OpenStreetMap data in the footer.
+Weather: [Open-Meteo](https://open-meteo.com/) (CC BY 4.0). Resorts and roads:
+© [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Routing:
+[OSRM](https://project-osrm.org/). Ski areas and terrain stats: [OpenSkiMap](https://openskimap.org/)
+(OpenStreetMap, ODbL; skimap.org) plus resort-published figures for 104 major resorts.
+`skiAreas.json` is a derived database and is shared under the ODbL. Hero video: [Mixkit](https://mixkit.co/). Forecasts and snow cover are model estimates; drive
+times exclude traffic.

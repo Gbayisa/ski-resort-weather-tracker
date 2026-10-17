@@ -1,43 +1,38 @@
+import { Snowflake } from 'lucide-react';
+
 export default function Footer() {
   return (
-    <footer className="app-footer">
-      <div className="footer-links">
-        <span>🏔️ Ski Resort Weather Tracker</span>
-        <span>|</span>
-        <span>Built for local testing</span>
+    <footer className="footer">
+      <div className="footer-brand">
+        <span className="brand-mark brand-mark-sm">
+          <Snowflake size={14} strokeWidth={2.5} />
+        </span>
+        <strong>PowderRadar</strong>
+        <span className="muted">Know before you go</span>
       </div>
-
-      <div className="attribution">
-        <p>
-          Weather data provided by{' '}
-          <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">
-            Open-Meteo.com
-          </a>
-          .{' '}
-          Open-Meteo provides free APIs for non-commercial use. Sites or apps with advertising
-          are considered commercial use under their{' '}
-          <a href="https://open-meteo.com/en/terms" target="_blank" rel="noopener noreferrer">
-            terms of service
-          </a>
-          .
-        </p>
-        <p style={{ marginTop: '0.5rem' }}>
-          Ski resort data derived from{' '}
-          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">
-            © OpenStreetMap contributors
-          </a>
-          . Data available under the{' '}
-          <a href="https://opendatacommons.org/licenses/odbl/" target="_blank" rel="noopener noreferrer">
-            ODbL
-          </a>
-          .
-        </p>
-        <p style={{ marginTop: '0.5rem', fontSize: '0.7rem' }}>
-          For production use with ads: ensure a Google AdSense account is active and a certified CMP
-          is integrated for EU/EEA/UK/Switzerland consent requirements. Open-Meteo commercial API
-          license required for ad-supported sites.
-        </p>
-      </div>
+      <p>
+        Forecasts are model estimates; snow cover is estimated and drive times exclude traffic. Always check road,
+        weather and avalanche conditions with official sources before heading out.
+      </p>
+      <p className="footer-credits">
+        Weather data by{' '}
+        <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">
+          Open-Meteo.com
+        </a>{' '}
+        (CC BY 4.0). Resort and road data ©{' '}
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">
+          OpenStreetMap contributors
+        </a>{' '}
+        (ODbL), ski areas via{' '}
+        <a href="https://openskimap.org/" target="_blank" rel="noopener noreferrer">
+          OpenSkiMap
+        </a>
+        , routing by{' '}
+        <a href="https://project-osrm.org/" target="_blank" rel="noopener noreferrer">
+          OSRM
+        </a>
+        . Video: Mixkit.
+      </p>
     </footer>
   );
 }

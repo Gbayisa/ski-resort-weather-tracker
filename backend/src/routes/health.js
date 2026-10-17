@@ -6,7 +6,9 @@ const router = Router();
 router.get('/', (_req, res) => {
   const db = getDb();
   const resortCount = db.prepare('SELECT COUNT(*) as count FROM resorts').get();
-  const cacheCount = db.prepare('SELECT COUNT(*) as count FROM weather_cache').get();
+  const cacheCount = db
+    .prepare('SELECT COUNT(*) as count FROM resort_forecasts WHERE expires_at > ?')
+    .get(new Date().toISOString());
 
   res.json({
     status: 'ok',

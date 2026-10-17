@@ -1,4 +1,15 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { getDb, initDb } from '../db/database.js';
+import { RESORT_STATS } from '../data/resortStats.js';
+
+const SKI_AREAS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'skiAreas.json');
+
+/** OpenSkiMap-derived catalogue (built by importOpenSkiMap.js). */
+export function loadSkiAreas() {
+  return JSON.parse(fs.readFileSync(SKI_AREAS_FILE, 'utf8'));
+}
 
 /**
  * Seed script: populates the resorts table with a curated set of well-known
@@ -457,8 +468,53 @@ export async function seed() {
 
   insertMany(SEED_RESORTS);
 
+  // Apply terrain stats (piste km, lifts, parks, difficulty split) where known.
+  // Runs as UPDATE so it also enriches rows inserted by earlier versions.
+  const updateStats = db.prepare(`
+    UPDATE resorts
+    SET piste_km = ?, lifts = ?, snowparks = ?, pct_easy = ?, pct_intermediate = ?, pct_advanced = ?
+    WHERE osm_id = ?
+  `);
+  const applyStats = db.transaction(() => {
+    for (const [osmId, s] of Object.entries(RESORT_STATS)) {
+      updateStats.run(s.pisteKm ?? null, s.lifts ?? null, s.parks ?? null, s.easy ?? null, s.inter ?? null, s.adv ?? null, osmId);
+    }
+  });
+  applyStats();
+
+  // OpenSkiMap catalogue: every operating ski area, not just the famous ones.
+  // Upsert so a re-import refreshes names, locations and stats.
+  const { areas, curatedFill } = loadSkiAreas();
+  const upsertArea = db.prepare(`
+    INSERT INTO resorts (name, lat, lon, country, region, website, osm_id, elevation_base, elevation_peak,
+                         piste_km, lifts, pct_easy, pct_intermediate, pct_advanced)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(osm_id) DO UPDATE SET
+      name = excluded.name, lat = excluded.lat, lon = excluded.lon, country = excluded.country,
+      region = excluded.region, website = excluded.website, elevation_base = excluded.elevation_base,
+      elevation_peak = excluded.elevation_peak, piste_km = excluded.piste_km, lifts = excluded.lifts,
+      pct_easy = excluded.pct_easy, pct_intermediate = excluded.pct_intermediate, pct_advanced = excluded.pct_advanced
+  `);
+  // Curated resorts without hand-compiled stats get them from their OpenSkiMap area
+  const fillStats = db.prepare(`
+    UPDATE resorts SET piste_km = ?, lifts = ?, pct_easy = ?, pct_intermediate = ?, pct_advanced = ?
+    WHERE osm_id = ? AND pct_easy IS NULL AND piste_km IS NULL
+  `);
+  db.transaction(() => {
+    for (const a of areas) {
+      upsertArea.run(
+        a.name, a.lat, a.lon, a.country, a.region, a.website, `osk:${a.id}`, a.base, a.peak,
+        a.pisteKm ?? null, a.lifts ?? null, a.easy ?? null, a.inter ?? null, a.adv ?? null
+      );
+    }
+    for (const [osmId, f] of Object.entries(curatedFill)) {
+      fillStats.run(f.pisteKm ?? null, f.lifts ?? null, f.easy ?? null, f.inter ?? null, f.adv ?? null, osmId);
+    }
+  })();
+
   const count = db.prepare('SELECT COUNT(*) as count FROM resorts').get();
-  console.log(`Seeded ${count.count} ski resorts.`);
+  const statsCount = db.prepare('SELECT COUNT(*) as count FROM resorts WHERE pct_easy IS NOT NULL').get();
+  console.log(`Seeded ${count.count} ski resorts (${statsCount.count} with terrain stats).`);
 }
 
 // Only run when executed directly (not when imported by tests or other modules)

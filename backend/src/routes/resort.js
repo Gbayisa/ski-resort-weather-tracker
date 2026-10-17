@@ -1,13 +1,28 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { getWeatherForResort } from '../services/weatherCache.js';
+import { terrainOf } from '../services/discover.js';
+import { getDriveInfoBatch } from '../services/driveTime.js';
 
 const router = Router();
+
+/** GET /api/resort/search?q= — name search for pickers (home mountain). Declared before /:id. */
+router.get('/search', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (q.length < 2) return res.json({ results: [] });
+  const results = getDb()
+    .prepare(
+      `SELECT id, name, region, country FROM resorts WHERE name LIKE ?
+       ORDER BY (name LIKE ?) DESC, piste_km DESC NULLS LAST, name LIMIT 8`
+    )
+    .all(`%${q}%`, `${q}%`);
+  res.json({ results });
+});
 
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { date } = req.query;
+    const { date, lat, lon } = req.query;
 
     if (!date) {
       return res.status(400).json({ error: 'date query parameter is required' });
@@ -22,6 +37,19 @@ router.get('/:id', async (req, res) => {
 
     const weather = await getWeatherForResort(resort, date);
 
+    // Optional drive info when the client provides its origin
+    let drive = {};
+    if (lat && lon) {
+      const originLat = parseFloat(lat);
+      const originLon = parseFloat(lon);
+      const info = (await getDriveInfoBatch(originLat, originLon, [resort])).get(resort.id);
+      drive = {
+        driveDistanceKm: info.distanceKm,
+        driveTimeMin: info.durationMin,
+        driveSource: info.source,
+      };
+    }
+
     res.json({
       id: resort.id,
       name: resort.name,
@@ -30,7 +58,9 @@ router.get('/:id', async (req, res) => {
       country: resort.country,
       region: resort.region,
       website: resort.website,
+      terrain: terrainOf(resort),
       forecastDate: date,
+      ...drive,
       ...(weather || {}),
     });
   } catch (err) {

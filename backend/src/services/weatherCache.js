@@ -1,5 +1,5 @@
 import { getDb } from '../db/database.js';
-import { fetchWeatherData } from './openMeteo.js';
+import { fetchForecastBatch, MAX_LOCATIONS_PER_REQUEST } from './openMeteo.js';
 import {
   parseForecastBlocks,
   parseHourlyTimeline,
@@ -10,53 +10,175 @@ import {
   freshSnowfall,
 } from './forecastUtils.js';
 
-const CACHE_TTL_HOURS = 3;
+/** Weather models behind Open-Meteo update every 1–6 hours; 3h keeps data fresh. */
+export const CACHE_TTL_HOURS = 3;
+const PARALLEL_REQUESTS = 2;
+/** Parsed forecasts are ~50 KB each in memory; cap the cache for small instances. */
+const PARSED_CACHE_MAX = 1500;
 
 /**
- * Get weather data for a resort, using cache when available.
+ * Make sure every given resort has a fresh cached forecast, fetching the
+ * missing ones in multi-location batches (one HTTP request per 50 resorts).
+ * Each resort's forecast covers every selectable date, so it is fetched at
+ * most once per TTL no matter how many dates or users look at it.
+ * Never throws; resorts whose batch fails simply stay uncached.
+ * `freshUntil` (ISO string) treats forecasts expiring before it as stale,
+ * letting the scheduler refresh ahead of expiry.
+ */
+export async function ensureForecasts(resorts, { freshUntil = new Date().toISOString() } = {}) {
+  if (resorts.length === 0) return;
+  const db = getDb();
+
+  const fresh = new Set(
+    db
+      .prepare('SELECT resort_id FROM resort_forecasts WHERE expires_at > ?')
+      .all(freshUntil)
+      .map((r) => r.resort_id)
+  );
+  const missing = resorts.filter((r) => !fresh.has(r.id));
+  if (missing.length === 0) return;
+
+  // Upsert (not REPLACE) so a refresh keeps the row's last_used_at
+  const upsert = db.prepare(
+    `INSERT INTO resort_forecasts (resort_id, data, fetched_at, expires_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(resort_id) DO UPDATE SET
+       data = excluded.data, fetched_at = excluded.fetched_at, expires_at = excluded.expires_at`
+  );
+
+  const batches = [];
+  for (let i = 0; i < missing.length; i += MAX_LOCATIONS_PER_REQUEST) {
+    batches.push(missing.slice(i, i + MAX_LOCATIONS_PER_REQUEST));
+  }
+  // A few batches in flight at once keeps a cold search near a dense region fast
+  const queue = [...batches];
+  await Promise.all(
+    Array.from({ length: Math.min(PARALLEL_REQUESTS, queue.length) }, async () => {
+      while (queue.length) await fetchBatch(queue.shift());
+    })
+  );
+
+  async function fetchBatch(batch) {
+    try {
+      const responses = await fetchForecastBatch(batch);
+      const fetchedAt = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + CACHE_TTL_HOURS * 3600 * 1000).toISOString();
+      db.transaction(() => {
+        batch.forEach((resort, idx) => {
+          const resp = responses[idx];
+          if (!resp?.hourly) return;
+          // Store the Open-Meteo grid-cell elevation alongside hourly data (used for lapse rates)
+          upsert.run(
+            resort.id,
+            JSON.stringify({ hourly: resp.hourly, apiElevation: resp.elevation }),
+            fetchedAt,
+            expiresAt
+          );
+        });
+      })();
+    } catch (err) {
+      console.error(`Failed to fetch forecasts for ${batch.length} resorts:`, err.message);
+    }
+  }
+}
+
+/**
+ * Background warm-up queue: forecasts a search didn't fetch inline (and the
+ * scheduler's refreshes) are fetched here, paced under Open-Meteo's free-tier
+ * limit of 600 locations/minute: 50 locations every 8 s ≈ 375/minute.
+ */
+const WARM_INTERVAL_MS = 8000;
+const warmQueue = new Map(); // resort id → resort
+let warmTimer = null;
+
+/** Ids among `resortIds` whose cached forecast is still fresh. */
+export function freshForecastIds(resortIds) {
+  if (resortIds.length === 0) return new Set();
+  const placeholders = resortIds.map(() => '?').join(',');
+  return new Set(
+    getDb()
+      .prepare(`SELECT resort_id FROM resort_forecasts WHERE expires_at > ? AND resort_id IN (${placeholders})`)
+      .all(new Date().toISOString(), ...resortIds)
+      .map((r) => r.resort_id)
+  );
+}
+
+export function queueForecasts(resorts) {
+  for (const r of resorts) warmQueue.set(r.id, r);
+  if (!warmTimer && warmQueue.size > 0) {
+    warmTimer = setTimeout(drainWarmQueue, 0);
+    warmTimer.unref?.();
+  }
+}
+
+async function drainWarmQueue() {
+  const batch = [...warmQueue.values()].slice(0, MAX_LOCATIONS_PER_REQUEST);
+  batch.forEach((r) => warmQueue.delete(r.id));
+  await ensureForecasts(batch);
+  warmTimer = warmQueue.size > 0 ? setTimeout(drainWarmQueue, WARM_INTERVAL_MS) : null;
+  warmTimer?.unref?.();
+}
+
+/** Parsed forecasts keyed by resort id; reused while the DB row's fetched_at is unchanged. */
+const parsedCache = new Map();
+
+/**
+ * Read cached forecasts for many resorts. Returns Map id → { hourly, apiElevation }.
+ * Expired rows are still returned (a few-hours-old forecast beats none) — the
+ * scheduler keeps them fresh.
+ */
+export function readForecasts(resortIds) {
+  const result = new Map();
+  if (resortIds.length === 0) return result;
+  const db = getDb();
+  const placeholders = resortIds.map(() => '?').join(',');
+  const rows = db
+    .prepare(`SELECT resort_id, fetched_at FROM resort_forecasts WHERE resort_id IN (${placeholders})`)
+    .all(...resortIds);
+  const getData = db.prepare('SELECT data FROM resort_forecasts WHERE resort_id = ?');
+
+  for (const row of rows) {
+    const hit = parsedCache.get(row.resort_id);
+    if (hit && hit.fetchedAt === row.fetched_at) {
+      result.set(row.resort_id, hit.forecast);
+      continue;
+    }
+    const parsed = JSON.parse(getData.get(row.resort_id).data);
+    const forecast = { hourly: parsed.hourly, apiElevation: parsed.apiElevation };
+    parsedCache.delete(row.resort_id);
+    parsedCache.set(row.resort_id, { fetchedAt: row.fetched_at, forecast });
+    if (parsedCache.size > PARSED_CACHE_MAX) parsedCache.delete(parsedCache.keys().next().value);
+    result.set(row.resort_id, forecast);
+  }
+  db.prepare(`UPDATE resort_forecasts SET last_used_at = ? WHERE resort_id IN (${placeholders})`).run(
+    new Date().toISOString(),
+    ...resortIds
+  );
+  return result;
+}
+
+/**
+ * Get weather data for a resort on a given date, using the cached forecast
+ * (fetching it if missing). Returns null if no forecast could be obtained.
  */
 export async function getWeatherForResort(resort, forecastDate) {
   const db = getDb();
-  const now = new Date().toISOString();
+  const readCached = () =>
+    db
+      .prepare('SELECT data FROM resort_forecasts WHERE resort_id = ? AND expires_at > ?')
+      .get(resort.id, new Date().toISOString());
 
-  // Check cache
-  const cached = db
-    .prepare(
-      `SELECT data FROM weather_cache
-       WHERE resort_id = ? AND forecast_date = ? AND expires_at > ?`
-    )
-    .get(resort.id, forecastDate, now);
+  let cached = readCached();
+  if (!cached) {
+    await ensureForecasts([resort]);
+    cached = readCached();
+  }
+  if (!cached) return null;
 
-  let hourlyData;
-
-  if (cached) {
-    const parsed = JSON.parse(cached.data);
-    hourlyData = parsed.hourly;
-    // Restore the API elevation stored alongside the hourly data
-    if (parsed.apiElevation != null) {
-      hourlyData._apiElevation = parsed.apiElevation;
-    }
-  } else {
-    try {
-      const weatherResp = await fetchWeatherData(resort.lat, resort.lon, forecastDate);
-      hourlyData = weatherResp.hourly;
-
-      // Cache the result — store the Open-Meteo grid-cell elevation alongside hourly data
-      const expiresAt = new Date(Date.now() + CACHE_TTL_HOURS * 3600 * 1000).toISOString();
-      db.prepare(
-        `INSERT OR REPLACE INTO weather_cache (resort_id, forecast_date, data, fetched_at, expires_at)
-         VALUES (?, ?, ?, ?, ?)`
-      ).run(
-        resort.id,
-        forecastDate,
-        JSON.stringify({ hourly: weatherResp.hourly, apiElevation: weatherResp.elevation }),
-        now,
-        expiresAt,
-      );
-    } catch (err) {
-      console.error(`Failed to fetch weather for ${resort.name}:`, err.message);
-      return null;
-    }
+  const parsed = JSON.parse(cached.data);
+  const hourlyData = parsed.hourly;
+  if (parsed.apiElevation != null) {
+    hourlyData._apiElevation = parsed.apiElevation;
   }
 
   const elevBase = resort.elevation_base || 0;
@@ -113,14 +235,4 @@ export async function getWeatherForResort(resort, forecastDate) {
       peak: elevPeak,
     },
   };
-}
-
-/**
- * Warm the cache for a specific resort and date.
- */
-export async function warmCache(resortId, forecastDate) {
-  const db = getDb();
-  const resort = db.prepare('SELECT * FROM resorts WHERE id = ?').get(resortId);
-  if (!resort) return;
-  await getWeatherForResort(resort, forecastDate);
 }

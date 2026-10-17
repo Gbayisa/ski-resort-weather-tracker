@@ -70,7 +70,7 @@ const ALT_PRECIP_TO_SNOW = 1;
  * but the altitude is cold enough, estimate snowfall from precipitation using
  * the standard 10:1 snow:water depth ratio (1 mm liquid ≈ 1 cm snow).
  */
-function computeSnowfallAtAlt(snowfall, precipitation, tempAtAlt) {
+export function computeSnowfallAtAlt(snowfall, precipitation, tempAtAlt) {
   if (tempAtAlt === null || tempAtAlt === undefined) {
     return Math.round(snowfall * 10) / 10;
   }
@@ -274,13 +274,14 @@ export function daySnowfallMidAlt(hourlyData, forecastDate, elevations, apiEleva
  */
 export function historicalSnowfall(hourlyData, forecastDate, days = 3, elevations, apiElevation) {
   const result = [];
-  const baseDate = new Date(forecastDate + 'T00:00:00');
+  // Calendar math in UTC: local-time parsing + toISOString() shifts the date in non-UTC zones
+  const baseDate = new Date(forecastDate + 'T00:00:00Z');
   const { base: baseElev = 0, mid: midElev = 0, peak: peakElev = 0 } = elevations || {};
   const _apiElevation = apiElevation ?? baseElev;
 
   for (let d = 1; d <= days; d++) {
     const pastDate = new Date(baseDate);
-    pastDate.setDate(pastDate.getDate() - d);
+    pastDate.setUTCDate(pastDate.getUTCDate() - d);
     const dateStr = pastDate.toISOString().split('T')[0];
 
     let snowMid = 0;
