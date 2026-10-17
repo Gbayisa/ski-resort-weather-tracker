@@ -1,7 +1,8 @@
 # ⛷️ PowderRadar
 
-**Your perfect ski day in three taps.** PowderRadar ranks ski resorts by real drive time and live snow
-conditions, and lets solo skiers and snowboarders meet other riders on the mountain.
+**Your perfect ski day in three taps.** PowderRadar ranks ~3,700 ski areas worldwide — from the big
+names to local hills — by real drive time and live snow conditions, and lets solo skiers and
+snowboarders meet other riders on the mountain.
 
 ## What it does
 
@@ -75,7 +76,7 @@ cd backend && npm install && npm run dev      # API on http://localhost:3001 (se
 cd frontend && npm install && npm run dev     # App on http://localhost:5173 (proxies /api)
 ```
 
-Tests: `npm test` in `backend/` (96 tests) and `frontend/` (35 tests).
+Tests: `npm test` in `backend/` (103 tests) and `frontend/` (35 tests).
 
 ## Configuration
 
@@ -111,9 +112,20 @@ penalised; weekend and week trips blend daily scores (weeks also reward bigger s
 **Seasons** (`backend/src/data/seasons.js`): typical season windows per region plus overrides for glaciers
 and early openers. These are typical dates — the UI never presents them as guaranteed.
 
-**Caching & cost**: one forecast per resort covers every date (fetched in batches of 50, 12 days per
-location so each counts as a single Open-Meteo call). All resorts refresh every 3 h ≈ 2,400 calls/day —
-a fixed cost regardless of traffic, under 10% of Open-Meteo's smallest commercial plan.
+**Catalogue** (`backend/src/data/skiAreas.json`, built by `npm run import:skiareas`): 297 hand-curated
+resorts plus ~3,440 operating ski areas from [OpenSkiMap](https://openskimap.org/) with at least 1 km of
+runs (or listed on skimap.org). Each area's drive-to point is its lowest lift station; umbrella domains
+and lift-pass alliances (Dolomiti Superski, Les Trois Vallées…) are dropped in favour of their member
+areas; curated resorts get terrain stats from their matching area. To refresh, download
+`ski_areas.geojson` and `lifts.geojson` from `https://tiles.openskimap.org/geojson/` and run
+`node src/scripts/importOpenSkiMap.js <ski_areas> <lifts>`.
+
+**Caching & cost**: one forecast per resort covers every date (12 days per location, so each counts as
+a single Open-Meteo call). Only resorts in season are fetched. A search fetches at most 150 missing
+forecasts inline (waiting ≤ 8 s) and queues the rest, paced at ~375 locations/minute; the app re-asks
+until `pendingForecasts` is 0. The scheduler keeps forecasts used in the last 24 h fresh every 3 h.
+Cost follows demand: the hard ceiling (every in-season area viewed all day) is ~30k calls/day, within
+Open-Meteo's $29/month Standard plan (1M calls); typical use is far lower.
 
 ## Launch checklist
 
@@ -124,7 +136,9 @@ a fixed cost regardless of traffic, under 10% of Open-Meteo's smallest commercia
 - **Accounts** — riders are identified by a device token (only its hash is stored). Before a public launch,
   add verified sign-in (Apple / Google / phone) so bans and reports stick to a person, plus a privacy
   policy and moderation process for reports.
-- **Weather licence** — free Open-Meteo is non-commercial; set `OPEN_METEO_API_KEY` once you run ads.
+- **Weather licence** — free Open-Meteo is non-commercial and throttles bursts. Running ads makes the
+  site commercial: subscribe to Open-Meteo's Standard plan ($29/month, 1M calls, commercial licence,
+  dedicated capacity) and set `OPEN_METEO_API_KEY` — no code changes.
 - **Routing** — point `OSRM_URL` at a self-hosted or commercial OSRM-compatible server.
 - **Video** — the hero streams from Mixkit's CDN; self-host the three 720p clips for reliability.
 - **Ads (EU)** — AdSense needs a Google-certified consent banner for EU/EEA/UK/CH traffic.
@@ -133,6 +147,7 @@ a fixed cost regardless of traffic, under 10% of Open-Meteo's smallest commercia
 
 Weather: [Open-Meteo](https://open-meteo.com/) (CC BY 4.0). Resorts and roads:
 © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). Routing:
-[OSRM](https://project-osrm.org/). Terrain stats compiled from resort-published figures for 104 major
-resorts. Hero video: [Mixkit](https://mixkit.co/). Forecasts and snow cover are model estimates; drive
+[OSRM](https://project-osrm.org/). Ski areas and terrain stats: [OpenSkiMap](https://openskimap.org/)
+(OpenStreetMap, ODbL; skimap.org) plus resort-published figures for 104 major resorts.
+`skiAreas.json` is a derived database and is shared under the ODbL. Hero video: [Mixkit](https://mixkit.co/). Forecasts and snow cover are model estimates; drive
 times exclude traffic.

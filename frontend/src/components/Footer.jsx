@@ -23,7 +23,11 @@ export default function Footer() {
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">
           OpenStreetMap contributors
         </a>{' '}
-        (ODbL), routing by{' '}
+        (ODbL), ski areas via{' '}
+        <a href="https://openskimap.org/" target="_blank" rel="noopener noreferrer">
+          OpenSkiMap
+        </a>
+        , routing by{' '}
         <a href="https://project-osrm.org/" target="_blank" rel="noopener noreferrer">
           OSRM
         </a>

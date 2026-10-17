@@ -12,6 +12,9 @@ import {
 
 /** Weather models behind Open-Meteo update every 1–6 hours; 3h keeps data fresh. */
 export const CACHE_TTL_HOURS = 3;
+const PARALLEL_REQUESTS = 2;
+/** Parsed forecasts are ~50 KB each in memory; cap the cache for small instances. */
+const PARSED_CACHE_MAX = 1500;
 
 /**
  * Make sure every given resort has a fresh cached forecast, fetching the
@@ -35,13 +38,27 @@ export async function ensureForecasts(resorts, { freshUntil = new Date().toISOSt
   const missing = resorts.filter((r) => !fresh.has(r.id));
   if (missing.length === 0) return;
 
+  // Upsert (not REPLACE) so a refresh keeps the row's last_used_at
   const upsert = db.prepare(
-    `INSERT OR REPLACE INTO resort_forecasts (resort_id, data, fetched_at, expires_at)
-     VALUES (?, ?, ?, ?)`
+    `INSERT INTO resort_forecasts (resort_id, data, fetched_at, expires_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(resort_id) DO UPDATE SET
+       data = excluded.data, fetched_at = excluded.fetched_at, expires_at = excluded.expires_at`
   );
 
+  const batches = [];
   for (let i = 0; i < missing.length; i += MAX_LOCATIONS_PER_REQUEST) {
-    const batch = missing.slice(i, i + MAX_LOCATIONS_PER_REQUEST);
+    batches.push(missing.slice(i, i + MAX_LOCATIONS_PER_REQUEST));
+  }
+  // A few batches in flight at once keeps a cold search near a dense region fast
+  const queue = [...batches];
+  await Promise.all(
+    Array.from({ length: Math.min(PARALLEL_REQUESTS, queue.length) }, async () => {
+      while (queue.length) await fetchBatch(queue.shift());
+    })
+  );
+
+  async function fetchBatch(batch) {
     try {
       const responses = await fetchForecastBatch(batch);
       const fetchedAt = new Date().toISOString();
@@ -63,6 +80,43 @@ export async function ensureForecasts(resorts, { freshUntil = new Date().toISOSt
       console.error(`Failed to fetch forecasts for ${batch.length} resorts:`, err.message);
     }
   }
+}
+
+/**
+ * Background warm-up queue: forecasts a search didn't fetch inline (and the
+ * scheduler's refreshes) are fetched here, paced under Open-Meteo's free-tier
+ * limit of 600 locations/minute: 50 locations every 8 s ≈ 375/minute.
+ */
+const WARM_INTERVAL_MS = 8000;
+const warmQueue = new Map(); // resort id → resort
+let warmTimer = null;
+
+/** Ids among `resortIds` whose cached forecast is still fresh. */
+export function freshForecastIds(resortIds) {
+  if (resortIds.length === 0) return new Set();
+  const placeholders = resortIds.map(() => '?').join(',');
+  return new Set(
+    getDb()
+      .prepare(`SELECT resort_id FROM resort_forecasts WHERE expires_at > ? AND resort_id IN (${placeholders})`)
+      .all(new Date().toISOString(), ...resortIds)
+      .map((r) => r.resort_id)
+  );
+}
+
+export function queueForecasts(resorts) {
+  for (const r of resorts) warmQueue.set(r.id, r);
+  if (!warmTimer && warmQueue.size > 0) {
+    warmTimer = setTimeout(drainWarmQueue, 0);
+    warmTimer.unref?.();
+  }
+}
+
+async function drainWarmQueue() {
+  const batch = [...warmQueue.values()].slice(0, MAX_LOCATIONS_PER_REQUEST);
+  batch.forEach((r) => warmQueue.delete(r.id));
+  await ensureForecasts(batch);
+  warmTimer = warmQueue.size > 0 ? setTimeout(drainWarmQueue, WARM_INTERVAL_MS) : null;
+  warmTimer?.unref?.();
 }
 
 /** Parsed forecasts keyed by resort id; reused while the DB row's fetched_at is unchanged. */
@@ -91,9 +145,15 @@ export function readForecasts(resortIds) {
     }
     const parsed = JSON.parse(getData.get(row.resort_id).data);
     const forecast = { hourly: parsed.hourly, apiElevation: parsed.apiElevation };
+    parsedCache.delete(row.resort_id);
     parsedCache.set(row.resort_id, { fetchedAt: row.fetched_at, forecast });
+    if (parsedCache.size > PARSED_CACHE_MAX) parsedCache.delete(parsedCache.keys().next().value);
     result.set(row.resort_id, forecast);
   }
+  db.prepare(`UPDATE resort_forecasts SET last_used_at = ? WHERE resort_id IN (${placeholders})`).run(
+    new Date().toISOString(),
+    ...resortIds
+  );
   return result;
 }
 

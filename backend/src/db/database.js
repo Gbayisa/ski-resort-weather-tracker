@@ -149,5 +149,9 @@ export function initDb() {
     if (!existingCols.includes(name)) db.exec(`ALTER TABLE resorts ADD COLUMN ${ddl}`);
   }
 
+  // Forecasts track when a search last used them, so the scheduler only keeps hot ones fresh
+  const forecastCols = db.prepare('PRAGMA table_info(resort_forecasts)').all().map((c) => c.name);
+  if (!forecastCols.includes('last_used_at')) db.exec('ALTER TABLE resort_forecasts ADD COLUMN last_used_at TEXT');
+
   console.log('Database initialized at', DB_PATH);
 }

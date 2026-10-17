@@ -20,6 +20,7 @@ export const FORECAST_DAYS = 9;
 
 /** Locations per HTTP request (Open-Meteo accepts comma-separated coordinate lists). */
 export const MAX_LOCATIONS_PER_REQUEST = 50;
+const REQUEST_TIMEOUT_MS = 20000;
 
 /**
  * Build the forecast URL for one or more locations.
@@ -50,9 +51,20 @@ export async function fetchForecastBatch(locations) {
     throw new Error(`fetchForecastBatch accepts at most ${MAX_LOCATIONS_PER_REQUEST} locations`);
   }
 
-  const res = await fetch(buildForecastUrl(locations), {
-    headers: { 'User-Agent': USER_AGENT },
-  });
+  let res;
+  for (let attempt = 1; ; attempt++) {
+    res = await fetch(buildForecastUrl(locations), {
+      headers: { 'User-Agent': USER_AGENT },
+      // A stalled connection must never hang a search
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    // 429/503 are Open-Meteo throttling a burst: one patient retry, then give up
+    if ((res.status === 429 || res.status === 503) && attempt === 1) {
+      await new Promise((r) => setTimeout(r, 4000));
+      continue;
+    }
+    break;
+  }
 
   if (!res.ok) {
     throw new Error(`Open-Meteo forecast error: ${res.status} ${res.statusText}`);

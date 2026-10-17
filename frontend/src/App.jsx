@@ -12,28 +12,46 @@ import { usePersistentState } from './hooks/usePersistentState.js';
 import { useHashRoute } from './hooks/useHashRoute.js';
 import { localISODate, defaultDayOffset, tripDates } from './utils/dates.js';
 
+/** While the server is still fetching forecasts for some resorts, re-ask this often (≈1 min max). */
+const PENDING_POLL_MS = 8000;
+const PENDING_POLL_MAX = 8;
+
 /** Fetch ranked resorts whenever the query changes; keeps the last result while refreshing. */
 function useDiscover(location, query) {
   const [state, setState] = useState({ data: null, loading: false, error: null });
+  const [poll, setPoll] = useState(0);
   const key = location ? JSON.stringify([location.latitude, location.longitude, query]) : null;
+
+  useEffect(() => setPoll(0), [key]);
 
   useEffect(() => {
     if (!key) return undefined;
     const controller = new AbortController();
-    setState((s) => ({ ...s, loading: true, error: null }));
-    const t = setTimeout(() => {
-      discover({ lat: location.latitude, lon: location.longitude, ...query }, controller.signal)
-        .then((data) => setState({ data, loading: false, error: null }))
-        .catch((err) => {
-          if (err.name !== 'AbortError') setState((s) => ({ ...s, loading: false, error: err.message }));
-        });
-    }, 120);
+    const background = poll > 0;
+    if (!background) setState((s) => ({ ...s, loading: true, error: null }));
+    let next;
+    const t = setTimeout(
+      () => {
+        discover({ lat: location.latitude, lon: location.longitude, ...query }, controller.signal)
+          .then((data) => {
+            setState({ data, loading: false, error: null });
+            if (data.pendingForecasts > 0 && poll < PENDING_POLL_MAX) {
+              next = setTimeout(() => setPoll((p) => p + 1), PENDING_POLL_MS);
+            }
+          })
+          .catch((err) => {
+            if (err.name !== 'AbortError') setState((s) => ({ ...s, loading: false, error: err.message }));
+          });
+      },
+      background ? 0 : 120
+    );
     return () => {
       clearTimeout(t);
+      clearTimeout(next);
       controller.abort();
     };
-    // `key` serialises location + query, so it is the only dependency needed
-  }, [key]);
+    // `key` serialises location + query; `poll` re-asks while forecasts are pending
+  }, [key, poll]);
 
   return state;
 }

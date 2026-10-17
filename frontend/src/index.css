@@ -827,6 +827,14 @@ button {
   display: grid;
   gap: 18px;
 }
+.pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.86rem;
+  color: var(--ice);
+}
 @media (min-width: 860px) {
   .results-grid {
     grid-template-columns: repeat(2, 1fr);

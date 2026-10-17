@@ -1,7 +1,7 @@
 import { getDb } from '../db/database.js';
 import { haversineDistance } from './forecastUtils.js';
-import { ensureForecasts, readForecasts } from './weatherCache.js';
-import { getDriveInfoBatch } from './driveTime.js';
+import { ensureForecasts, readForecasts, queueForecasts, freshForecastIds } from './weatherCache.js';
+import { getDriveInfoBatch, estimateDrive } from './driveTime.js';
 import { activeCheckinCounts } from './community.js';
 import { seasonStatus } from '../data/seasons.js';
 import { CAR_FREE_ACCESS, driveTarget } from '../data/access.js';
@@ -32,6 +32,25 @@ const PREFILTER_KMH = 110;
 const MAX_RESULTS = 24;
 const OUTLOOK_DAYS = 8;
 const POWDER_ALERT_CM = 15;
+/**
+ * Exact routing is the expensive part (public OSRM, ~80 destinations per call),
+ * so resorts are first ranked with an estimated drive time and only the most
+ * promising are routed: the top ROUTE_TOP for the chosen drive group, plus
+ * ROUTE_WIDEN within 4 h for the auto-widen fallback.
+ */
+const ROUTE_TOP = 60;
+const ROUTE_WIDEN = 30;
+/**
+ * Most missing forecasts a single search fetches before answering (3 Open-Meteo
+ * requests). The rest are queued and fetched in the background; the client
+ * re-asks while `pendingForecasts` > 0, so first searches stay fast even in
+ * peak season near dense regions like the Alps.
+ */
+const FETCH_INLINE = 150;
+/** Longest a search waits for new forecasts; slower fetches finish in the background. */
+const INLINE_BUDGET_MS = 8000;
+/** Drive minutes assuming fast roads (1.2× straight line at 100 km/h): never overestimates, so safe to filter on. */
+const optimisticMinutes = (crowKm) => crowKm * 0.72;
 /** Beyond this, "open elsewhere" suggestions stop being a realistic trip. */
 const OPEN_ELSEWHERE_MAX_KM = 1500;
 
@@ -70,10 +89,34 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
     .map((r) => ({ ...r, crowKm: haversineDistance(lat, lon, r.lat, r.lon) }))
     .filter((r) => r.crowKm <= maxKm);
 
-  const [, driveInfo] = await Promise.all([ensureForecasts(candidates), getDriveInfoBatch(lat, lon, candidates.map(driveTarget))]);
-  const forecasts = readForecasts(candidates.map((r) => r.id));
-  const riders = activeCheckinCounts();
   const outlookDates = Array.from({ length: OUTLOOK_DAYS }, (_, i) => addDays(today, i));
+  const relevantDates = [...new Set([...dates, ...outlookDates])];
+
+  // Closed resorts only inform the off-season notice: no forecast or route needed
+  const open = candidates.filter((r) => relevantDates.some((d) => seasonStatus(r, d).inSeason));
+
+  // Fetch the most promising missing forecasts now (close, in range, big, high); queue the rest
+  const fresh = freshForecastIds(open.map((r) => r.id));
+  const bucketMax = DRIVE_BUCKETS[drive].maxMinutes;
+  const promise = (r) => {
+    const minutes = optimisticMinutes(r.crowKm);
+    return (
+      (minutes <= bucketMax ? 2 : 0) +
+      Math.min(1, (r.piste_km ?? 5) / 100) +
+      Math.min(1, Math.max(0, ((r.elevation_peak || 0) - 1000) / 2000)) -
+      minutes / DRIVE_BUCKETS.best.maxMinutes
+    );
+  };
+  const missing = open.filter((r) => !fresh.has(r.id)).sort((a, b) => promise(b) - promise(a));
+  await Promise.race([
+    ensureForecasts(missing.slice(0, FETCH_INLINE)),
+    new Promise((resolve) => setTimeout(resolve, INLINE_BUDGET_MS).unref?.()),
+  ]);
+  queueForecasts(missing.slice(FETCH_INLINE));
+  // Stale forecasts are still served while they refresh in the background
+  const forecasts = readForecasts(open.map((r) => r.id));
+  const pendingForecasts = open.filter((r) => !forecasts.has(r.id)).length;
+  const riders = activeCheckinCounts();
 
   // Conditions are reused across trip days, outlook days and styles — compute each once
   const memo = new Map();
@@ -84,9 +127,10 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
   };
 
   const evaluated = [];
-  for (const resort of candidates) {
-    const info = driveInfo.get(resort.id);
-    if (!info || !forecasts.has(resort.id)) continue;
+  for (const resort of open) {
+    if (!forecasts.has(resort.id)) continue;
+    const target = driveTarget(resort);
+    const info = estimateDrive(haversineDistance(lat, lon, target.lat, target.lon));
     const season = seasonStatus(resort, dates[0]);
     const days = dates
       .map((d) => {
@@ -114,6 +158,23 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
       bestDate: best.c.date,
     });
   }
+
+  // Route the most promising resorts exactly; the rest keep a labelled estimate
+  const toRoute = new Set();
+  const shortlist = (bucket, n) =>
+    evaluated
+      .filter((e) => e.inSeason && optimisticMinutes(e.resort.crowKm) <= DRIVE_BUCKETS[bucket].maxMinutes)
+      .sort(
+        (a, b) =>
+          matchScore(b.conditionsScore, b.info.durationMin, bucket) -
+          matchScore(a.conditionsScore, a.info.durationMin, bucket)
+      )
+      .slice(0, n)
+      .forEach((e) => toRoute.add(e));
+  shortlist(drive, ROUTE_TOP);
+  if (drive !== 'best') shortlist('best', ROUTE_WIDEN);
+  const routed = await getDriveInfoBatch(lat, lon, [...toRoute].map((e) => driveTarget(e.resort)));
+  for (const e of toRoute) e.info = routed.get(e.resort.id) || e.info;
 
   const shape = (e, bucket) => ({
     id: e.resort.id,
@@ -204,7 +265,7 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
   // Nothing open within 4 h: say when the season starts and where snow is now
   let notice = null;
   if (results.length === 0) {
-    const openings = evaluated.map((e) => e.season.opensOn).filter(Boolean).sort();
+    const openings = candidates.map((r) => seasonStatus(r, dates[0]).opensOn).filter(Boolean).sort();
     const openElsewhere = db
       .prepare('SELECT * FROM resorts')
       .all()
@@ -216,7 +277,7 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
     notice = {
       type: 'off-season',
       nextOpening: openings[0] || null,
-      resortsNearby: evaluated.length,
+      resortsNearby: candidates.length,
       openElsewhere,
     };
   }
@@ -229,6 +290,7 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
     outlook,
     powderAlert,
     notice,
-    stats: { resortsWithin4h: evaluated.length, openNow: evaluated.filter((e) => e.inSeason).length },
+    pendingForecasts,
+    stats: { resortsNearby: candidates.length, openNow: evaluated.filter((e) => e.inSeason).length, routed: toRoute.size },
   };
 }

@@ -10,7 +10,8 @@
     "seed": "node src/scripts/seedResorts.js",
     "jobs": "node src/jobs/runner.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "import:skiareas": "node --max-old-space-size=4096 src/scripts/importOpenSkiMap.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

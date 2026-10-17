@@ -1,4 +1,4 @@
-import { Snowflake, Info, TriangleAlert, CalendarDays, MapPin } from 'lucide-react';
+import { Snowflake, Info, TriangleAlert, CalendarDays, MapPin, Loader2 } from 'lucide-react';
 import ResortCard from './ResortCard.jsx';
 import AdSlot from './AdSlot.jsx';
 import { DRIVES, STYLES } from './TripPlanner.jsx';
@@ -38,6 +38,13 @@ export default function Results({ state, origin, trip, drive, style, dates, onSt
             <strong>{styleInfo.title}</strong>
           </p>
         </header>
+      )}
+
+      {data.pendingForecasts > 0 && (
+        <p className="pending">
+          <Loader2 size={15} className="spin" /> Checking {data.pendingForecasts} more ski area
+          {data.pendingForecasts === 1 ? '' : 's'} nearby — results update automatically
+        </p>
       )}
 
       {data.powderAlert && style !== 'powder' && (
@@ -93,8 +100,9 @@ export default function Results({ state, origin, trip, drive, style, dates, onSt
 function OffSeason({ notice, locationName }) {
   if (notice.resortsNearby === 0) {
     return (
-      <EmptyState icon={MapPin} title="No ski resorts within 4 hours">
-        We couldn’t find any resorts within a 4-hour drive of {locationName}. Try a different starting point.
+      <EmptyState icon={MapPin} title="No ski areas we know of within 4 hours">
+        Our catalogue doesn’t have any ski areas within a 4-hour drive of {locationName} yet. Try a different
+        starting point.
       </EmptyState>
     );
   }

@@ -60,8 +60,19 @@ const OVERRIDES = {
   osm_ruka: { open: '10-25', close: '05-25' },
 };
 
+/** Glacier areas from the OpenSkiMap catalogue (no curated osm_id), matched by name. */
+const NAME_OVERRIDES = [
+  [/hintertux/i, { open: '01-01', close: '12-31', glacier: true }],
+  [/stubaier gletscher/i, { open: '10-01', close: '06-15', glacier: true }],
+  [/kaunertaler gletscher/i, { open: '10-15', close: '05-31', glacier: true }],
+  [/m[oö]lltaler gletscher/i, { open: '09-15', close: '06-30', glacier: true }],
+  [/schnalstal|val senales/i, { open: '09-20', close: '05-03', glacier: true }],
+  [/diavolezza/i, { open: '10-25', close: '05-25', glacier: true }],
+  [/glacier 3000/i, { open: '10-25', close: '05-01', glacier: true }],
+];
+
 export function seasonFor(resort) {
-  const override = OVERRIDES[resort.osm_id];
+  const override = OVERRIDES[resort.osm_id] || NAME_OVERRIDES.find(([re]) => re.test(resort.name || ''))?.[1];
   if (override) return { glacier: false, ...override };
   const byCountry = COUNTRY_DEFAULTS[resort.country];
   if (byCountry) return { glacier: false, ...byCountry };
