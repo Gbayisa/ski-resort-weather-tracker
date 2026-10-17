@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ExternalLink,
   Sparkles,
+  TrainFront,
 } from 'lucide-react';
 import ScoreRing from './ScoreRing.jsx';
 import TerrainBar from './TerrainBar.jsx';
@@ -74,6 +75,12 @@ export default function ResortCard({ resort, origin, trip, featured = false, onM
           <span className={`pill pill-muted conf-${resort.confidence}`}>{resort.confidence} confidence</span>
         )}
       </div>
+
+      {resort.access && (
+        <p className="rc-access">
+          <TrainFront size={15} /> {resort.access.note}
+        </p>
+      )}
 
       <div className="rc-stats">
         <Stat icon={Snowflake} label="Fresh 24 h" value={`${Math.round(snow.fresh24)} cm`} hot={snow.fresh24 >= 10} />

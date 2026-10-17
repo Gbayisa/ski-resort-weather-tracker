@@ -4,6 +4,7 @@ import { ensureForecasts, readForecasts } from './weatherCache.js';
 import { getDriveInfoBatch } from './driveTime.js';
 import { activeCheckinCounts } from './community.js';
 import { seasonStatus } from '../data/seasons.js';
+import { CAR_FREE_ACCESS, driveTarget } from '../data/access.js';
 import {
   dayConditions,
   scoreDay,
@@ -69,7 +70,7 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
     .map((r) => ({ ...r, crowKm: haversineDistance(lat, lon, r.lat, r.lon) }))
     .filter((r) => r.crowKm <= maxKm);
 
-  const [, driveInfo] = await Promise.all([ensureForecasts(candidates), getDriveInfoBatch(lat, lon, candidates)]);
+  const [, driveInfo] = await Promise.all([ensureForecasts(candidates), getDriveInfoBatch(lat, lon, candidates.map(driveTarget))]);
   const forecasts = readForecasts(candidates.map((r) => r.id));
   const riders = activeCheckinCounts();
   const outlookDates = Array.from({ length: OUTLOOK_DAYS }, (_, i) => addDays(today, i));
@@ -122,6 +123,7 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
     lat: e.resort.lat,
     lon: e.resort.lon,
     website: e.resort.website,
+    access: CAR_FREE_ACCESS[e.resort.osm_id] || null,
     drive: { minutes: e.info.durationMin, km: e.info.distanceKm, source: e.info.source },
     match: matchScore(e.conditionsScore, e.info.durationMin, bucket),
     score: e.conditionsScore,

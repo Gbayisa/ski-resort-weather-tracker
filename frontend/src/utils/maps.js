@@ -8,9 +8,11 @@
  * Loveland Ski Area), and a text search would route skiers to the wrong place.
  */
 export function buildDirectionsUrl(resort, origin) {
+  // Car-free resorts (Zermatt, Wengen…) carry an `access` point: where you leave the car
+  const target = resort.access ?? resort;
   const params = new URLSearchParams({
     api: '1',
-    destination: `${resort.lat},${resort.lon}`,
+    destination: `${target.lat},${target.lon}`,
     travelmode: 'driving',
   });
 

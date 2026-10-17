@@ -27,4 +27,9 @@ describe('buildDirectionsUrl', () => {
     expect(params(url).has('origin')).toBe(false);
     expect(params(url).get('dir_action')).toBe('navigate');
   });
+
+  it('navigates car-free resorts to the access car park, not the village', () => {
+    const zermatt = { ...chamonix, lat: 46.0207, lon: 7.7491, access: { lat: 46.0665, lon: 7.7776 } };
+    expect(params(buildDirectionsUrl(zermatt, null)).get('destination')).toBe('46.0665,7.7776');
+  });
 });

@@ -424,7 +424,7 @@ button {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(5, 10, 20, 0.55) 0%, rgba(5, 10, 20, 0.1) 32%, rgba(5, 10, 20, 0.45) 66%, var(--bg) 100%),
+    linear-gradient(180deg, rgba(5, 10, 20, 0.55) 0%, rgba(5, 10, 20, 0.12) 30%, rgba(5, 10, 20, 0.6) 64%, var(--bg) 100%),
     radial-gradient(ellipse 60% 50% at 15% 85%, rgba(56, 189, 248, 0.22), transparent 70%);
 }
 .hero-inner {
@@ -469,9 +469,10 @@ button {
   white-space: nowrap;
 }
 .location-start-q {
-  color: var(--text-2);
+  color: var(--text);
   font-weight: 600;
   margin-bottom: 12px;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.7);
 }
 .location-start-actions {
   display: flex;
@@ -987,6 +988,18 @@ button {
   }
 }
 
+.rc-access {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.rc-access svg {
+  flex: none;
+  color: var(--ice);
+}
+
 .rc-stats {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1356,9 +1369,11 @@ svg {
 }
 
 /* ---------- Sheets ---------- */
+/* The backdrop and sheet extend below the screen edge: when iOS Safari collapses its
+   toolbar (keyboard open), the page would otherwise show through under the sheet. */
 .sheet-backdrop {
   position: fixed;
-  inset: 0;
+  inset: 0 0 -120px 0;
   z-index: 100;
   display: flex;
   align-items: flex-end;
@@ -1373,7 +1388,7 @@ svg {
   max-height: 90vh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
+  padding: 8px 20px calc(140px + env(safe-area-inset-bottom));
   background: var(--bg-sheet);
   border: 1px solid var(--border);
   border-radius: 26px 26px 0 0;
@@ -1399,12 +1414,13 @@ svg {
 }
 @media (min-width: 760px) {
   .sheet-backdrop {
+    inset: 0;
     align-items: center;
   }
   .sheet {
     max-width: 520px;
     border-radius: 26px;
-    padding-top: 18px;
+    padding: 18px 20px 20px;
   }
   .sheet-handle {
     display: none;
