@@ -1,7 +1,9 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getDb, initDb } from '../db/database.js';
+import { closeDb, initDb } from '../db/database.js';
+import { invalidateResorts } from '../db/resortCatalog.js';
 import { RESORT_STATS } from '../data/resortStats.js';
 
 const SKI_AREAS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'skiAreas.json');
@@ -451,74 +453,106 @@ const SEED_RESORTS = [
 
 export { SEED_RESORTS };
 
-export async function seed() {
-  initDb();
-  const db = getDb();
+/** Column lists for the bulk statements below: each becomes one array parameter for unnest(). */
+const RESORT_COLUMNS = [
+  ['name', 'text'], ['lat', 'float8'], ['lon', 'float8'], ['country', 'text'], ['region', 'text'],
+  ['website', 'text'], ['osm_id', 'text'], ['elevation_base', 'int'], ['elevation_peak', 'int'],
+  ['piste_km', 'float8'], ['lifts', 'int'], ['pct_easy', 'int'], ['pct_intermediate', 'int'], ['pct_advanced', 'int'],
+];
 
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO resorts (name, lat, lon, country, region, website, osm_id, elevation_base, elevation_peak)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+/** Rows → one array per column, so thousands of rows travel in a single statement. */
+const columnArrays = (rows, columns) => columns.map(([name]) => rows.map((r) => r[name] ?? null));
+const unnestOf = (columns) =>
+  `unnest(${columns.map(([, type]) => `?::${type}[]`).join(', ')}) AS s(${columns.map(([name]) => name).join(', ')})`;
 
-  const insertMany = db.transaction((resorts) => {
-    for (const r of resorts) {
-      insert.run(r.name, r.lat, r.lon, r.country, r.region, r.website, r.osm_id, r.elevation_base || 0, r.elevation_peak || 0);
-    }
-  });
-
-  insertMany(SEED_RESORTS);
-
-  // Apply terrain stats (piste km, lifts, parks, difficulty split) where known.
-  // Runs as UPDATE so it also enriches rows inserted by earlier versions.
-  const updateStats = db.prepare(`
-    UPDATE resorts
-    SET piste_km = ?, lifts = ?, snowparks = ?, pct_easy = ?, pct_intermediate = ?, pct_advanced = ?
-    WHERE osm_id = ?
-  `);
-  const applyStats = db.transaction(() => {
-    for (const [osmId, s] of Object.entries(RESORT_STATS)) {
-      updateStats.run(s.pisteKm ?? null, s.lifts ?? null, s.parks ?? null, s.easy ?? null, s.inter ?? null, s.adv ?? null, osmId);
-    }
-  });
-  applyStats();
-
-  // OpenSkiMap catalogue: every operating ski area, not just the famous ones.
-  // Upsert so a re-import refreshes names, locations and stats.
+/**
+ * Load the resort catalogue: hand-curated resorts, their terrain stats, and every OpenSkiMap ski area.
+ * Skipped when the catalogue data is unchanged since the last run, so servers start fast.
+ */
+export async function seed({ force = false } = {}) {
+  const db = await initDb();
   const { areas, curatedFill } = loadSkiAreas();
-  const upsertArea = db.prepare(`
-    INSERT INTO resorts (name, lat, lon, country, region, website, osm_id, elevation_base, elevation_peak,
-                         piste_km, lifts, pct_easy, pct_intermediate, pct_advanced)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(osm_id) DO UPDATE SET
-      name = excluded.name, lat = excluded.lat, lon = excluded.lon, country = excluded.country,
-      region = excluded.region, website = excluded.website, elevation_base = excluded.elevation_base,
-      elevation_peak = excluded.elevation_peak, piste_km = excluded.piste_km, lifts = excluded.lifts,
-      pct_easy = excluded.pct_easy, pct_intermediate = excluded.pct_intermediate, pct_advanced = excluded.pct_advanced
-  `);
-  // Curated resorts without hand-compiled stats get them from their OpenSkiMap area
-  const fillStats = db.prepare(`
-    UPDATE resorts SET piste_km = ?, lifts = ?, pct_easy = ?, pct_intermediate = ?, pct_advanced = ?
-    WHERE osm_id = ? AND pct_easy IS NULL AND piste_km IS NULL
-  `);
-  db.transaction(() => {
-    for (const a of areas) {
-      upsertArea.run(
-        a.name, a.lat, a.lon, a.country, a.region, a.website, `osk:${a.id}`, a.base, a.peak,
-        a.pisteKm ?? null, a.lifts ?? null, a.easy ?? null, a.inter ?? null, a.adv ?? null
-      );
-    }
-    for (const [osmId, f] of Object.entries(curatedFill)) {
-      fillStats.run(f.pisteKm ?? null, f.lifts ?? null, f.easy ?? null, f.inter ?? null, f.adv ?? null, osmId);
-    }
-  })();
+  const version = crypto
+    .createHash('sha256')
+    .update(JSON.stringify([SEED_RESORTS, RESORT_STATS, areas, curatedFill]))
+    .digest('hex')
+    .slice(0, 16);
+  const loaded = await db.get("SELECT value FROM app_meta WHERE key = 'catalogue_version'");
+  if (!force && loaded?.value === version) return;
 
-  const count = db.prepare('SELECT COUNT(*) as count FROM resorts').get();
-  const statsCount = db.prepare('SELECT COUNT(*) as count FROM resorts WHERE pct_easy IS NOT NULL').get();
-  console.log(`Seeded ${count.count} ski resorts (${statsCount.count} with terrain stats).`);
+  const curated = SEED_RESORTS.map((r) => ({ ...r, elevation_base: r.elevation_base || 0, elevation_peak: r.elevation_peak || 0 }));
+  const osk = areas.map((a) => ({
+    name: a.name, lat: a.lat, lon: a.lon, country: a.country, region: a.region, website: a.website,
+    osm_id: `osk:${a.id}`, elevation_base: a.base, elevation_peak: a.peak,
+    piste_km: a.pisteKm, lifts: a.lifts, pct_easy: a.easy, pct_intermediate: a.inter, pct_advanced: a.adv,
+  }));
+  const stats = Object.entries(RESORT_STATS).map(([osmId, x]) => ({
+    osm_id: osmId, piste_km: x.pisteKm, lifts: x.lifts, snowparks: x.parks,
+    pct_easy: x.easy, pct_intermediate: x.inter, pct_advanced: x.adv,
+  }));
+  const fills = Object.entries(curatedFill).map(([osmId, f]) => ({
+    osm_id: osmId, piste_km: f.pisteKm, lifts: f.lifts, pct_easy: f.easy, pct_intermediate: f.inter, pct_advanced: f.adv,
+  }));
+  const STAT_COLUMNS = [
+    ['osm_id', 'text'], ['piste_km', 'float8'], ['lifts', 'int'], ['snowparks', 'int'],
+    ['pct_easy', 'int'], ['pct_intermediate', 'int'], ['pct_advanced', 'int'],
+  ];
+  const FILL_COLUMNS = STAT_COLUMNS.filter(([name]) => name !== 'snowparks');
+  const base = RESORT_COLUMNS.slice(0, 9);
+  const names = (cols) => cols.map(([name]) => name).join(', ');
+
+  await db.tx(async (t) => {
+    // Curated resorts keep their hand-checked details: insert once, never overwrite
+    await t.run(
+      `INSERT INTO resorts (${names(base)}) SELECT ${names(base)} FROM ${unnestOf(base)}
+       ON CONFLICT (osm_id) DO NOTHING`,
+      ...columnArrays(curated, base)
+    );
+    // Hand-compiled terrain stats; an UPDATE so it also enriches rows from earlier versions
+    await t.run(
+      `UPDATE resorts SET piste_km = s.piste_km, lifts = s.lifts, snowparks = s.snowparks, pct_easy = s.pct_easy,
+         pct_intermediate = s.pct_intermediate, pct_advanced = s.pct_advanced
+       FROM ${unnestOf(STAT_COLUMNS)} WHERE resorts.osm_id = s.osm_id`,
+      ...columnArrays(stats, STAT_COLUMNS)
+    );
+    // OpenSkiMap catalogue: every operating ski area. Upsert so a re-import refreshes names, locations and stats.
+    await t.run(
+      `INSERT INTO resorts (${names(RESORT_COLUMNS)}) SELECT ${names(RESORT_COLUMNS)} FROM ${unnestOf(RESORT_COLUMNS)}
+       ON CONFLICT (osm_id) DO UPDATE SET
+         name = excluded.name, lat = excluded.lat, lon = excluded.lon, country = excluded.country,
+         region = excluded.region, website = excluded.website, elevation_base = excluded.elevation_base,
+         elevation_peak = excluded.elevation_peak, piste_km = excluded.piste_km, lifts = excluded.lifts,
+         pct_easy = excluded.pct_easy, pct_intermediate = excluded.pct_intermediate, pct_advanced = excluded.pct_advanced`,
+      ...columnArrays(osk, RESORT_COLUMNS)
+    );
+    // Curated resorts without hand-compiled stats get them from their OpenSkiMap area
+    await t.run(
+      `UPDATE resorts SET piste_km = s.piste_km, lifts = s.lifts, pct_easy = s.pct_easy,
+         pct_intermediate = s.pct_intermediate, pct_advanced = s.pct_advanced
+       FROM ${unnestOf(FILL_COLUMNS)}
+       WHERE resorts.osm_id = s.osm_id AND resorts.pct_easy IS NULL AND resorts.piste_km IS NULL`,
+      ...columnArrays(fills, FILL_COLUMNS)
+    );
+    await t.run(
+      `INSERT INTO app_meta (key, value) VALUES ('catalogue_version', ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+      version
+    );
+  });
+  invalidateResorts();
+
+  const count = await db.get('SELECT COUNT(*) AS count FROM resorts');
+  const statsCount = await db.get('SELECT COUNT(*) AS count FROM resorts WHERE pct_easy IS NOT NULL');
+  if (process.env.NODE_ENV !== 'test') console.log(`Seeded ${count.count} ski resorts (${statsCount.count} with terrain stats).`);
 }
 
 // Only run when executed directly (not when imported by tests or other modules)
 const isMain = process.argv[1] && process.argv[1].endsWith('seedResorts.js');
 if (isMain) {
-  seed();
+  seed({ force: process.argv.includes('--force') })
+    .then(closeDb)
+    .catch((err) => {
+      console.error('Seeding failed:', err);
+      process.exit(1);
+    });
 }

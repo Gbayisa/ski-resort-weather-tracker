@@ -7,16 +7,22 @@ import { getDriveInfoBatch } from '../services/driveTime.js';
 const router = Router();
 
 /** GET /api/resort/search?q= — name search for pickers (home mountain). Declared before /:id. */
-router.get('/search', (req, res) => {
-  const q = String(req.query.q || '').trim();
+router.get('/search', async (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 60);
   if (q.length < 2) return res.json({ results: [] });
-  const results = getDb()
-    .prepare(
-      `SELECT id, name, region, country FROM resorts WHERE name LIKE ?
-       ORDER BY (name LIKE ?) DESC, piste_km DESC NULLS LAST, name LIMIT 8`
-    )
-    .all(`%${q}%`, `${q}%`);
-  res.json({ results });
+  const like = q.replace(/[\\%_]/g, (c) => `\\${c}`);
+  try {
+    const results = await getDb().all(
+      `SELECT id, name, region, country FROM resorts WHERE name ILIKE ?
+       ORDER BY (name ILIKE ?) DESC, piste_km DESC NULLS LAST, name LIMIT 8`,
+      `%${like}%`,
+      `${like}%`
+    );
+    res.json({ results });
+  } catch (err) {
+    console.error('Resort search error:', err.message);
+    res.status(500).json({ error: 'Resort search failed' });
+  }
 });
 
 router.get('/:id', async (req, res) => {
@@ -28,8 +34,7 @@ router.get('/:id', async (req, res) => {
       return res.status(400).json({ error: 'date query parameter is required' });
     }
 
-    const db = getDb();
-    const resort = db.prepare('SELECT * FROM resorts WHERE id = ?').get(id);
+    const resort = Number.isInteger(Number(id)) ? await getDb().get('SELECT * FROM resorts WHERE id = ?', Number(id)) : null;
 
     if (!resort) {
       return res.status(404).json({ error: 'Resort not found' });

@@ -1,0 +1,8 @@
+.git
+.claude
+**/node_modules
+frontend/dist
+backend/src/data/pglite
+**/*.db
+**/*.db-shm
+**/*.db-wal

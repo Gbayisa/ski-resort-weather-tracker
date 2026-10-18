@@ -9,3 +9,6 @@ data/resorts.json
 *.db
 *.db-shm
 *.db-wal
+
+# Embedded PostgreSQL used for local development
+backend/src/data/pglite/

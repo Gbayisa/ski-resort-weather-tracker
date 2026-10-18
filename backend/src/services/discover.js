@@ -1,4 +1,4 @@
-import { getDb } from '../db/database.js';
+import { allResorts } from '../db/resortCatalog.js';
 import { haversineDistance } from './forecastUtils.js';
 import { ensureForecasts, readForecasts, queueForecasts, freshForecastIds } from './weatherCache.js';
 import { getDriveInfoBatch, estimateDrive } from './driveTime.js';
@@ -81,11 +81,9 @@ const addDays = (iso, n) => {
  * @param {object} q { lat, lon, dates[], today, trip, drive, style }
  */
 export async function discover({ lat, lon, dates, today, trip, drive, style }) {
-  const db = getDb();
   const maxKm = (DRIVE_BUCKETS.best.maxMinutes / 60) * PREFILTER_KMH;
-  const candidates = db
-    .prepare('SELECT * FROM resorts')
-    .all()
+  const catalogue = await allResorts();
+  const candidates = catalogue
     .map((r) => ({ ...r, crowKm: haversineDistance(lat, lon, r.lat, r.lon) }))
     .filter((r) => r.crowKm <= maxKm);
 
@@ -96,7 +94,7 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
   const open = candidates.filter((r) => relevantDates.some((d) => seasonStatus(r, d).inSeason));
 
   // Fetch the most promising missing forecasts now (close, in range, big, high); queue the rest
-  const fresh = freshForecastIds(open.map((r) => r.id));
+  const fresh = await freshForecastIds(open.map((r) => r.id));
   const bucketMax = DRIVE_BUCKETS[drive].maxMinutes;
   const promise = (r) => {
     const minutes = optimisticMinutes(r.crowKm);
@@ -114,9 +112,9 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
   ]);
   queueForecasts(missing.slice(FETCH_INLINE));
   // Stale forecasts are still served while they refresh in the background
-  const forecasts = readForecasts(open.map((r) => r.id));
+  const forecasts = await readForecasts(open.map((r) => r.id));
   const pendingForecasts = open.filter((r) => !forecasts.has(r.id)).length;
-  const riders = activeCheckinCounts();
+  const riders = await activeCheckinCounts();
 
   // Conditions are reused across trip days, outlook days and styles — compute each once
   const memo = new Map();
@@ -266,9 +264,7 @@ export async function discover({ lat, lon, dates, today, trip, drive, style }) {
   let notice = null;
   if (results.length === 0) {
     const openings = candidates.map((r) => seasonStatus(r, dates[0]).opensOn).filter(Boolean).sort();
-    const openElsewhere = db
-      .prepare('SELECT * FROM resorts')
-      .all()
+    const openElsewhere = catalogue
       .filter((r) => seasonStatus(r, dates[0]).inSeason)
       .map((r) => ({ id: r.id, name: r.name, country: r.country, distanceKm: Math.round(haversineDistance(lat, lon, r.lat, r.lon)) }))
       .filter((r) => r.distanceKm <= OPEN_ELSEWHERE_MAX_KM)

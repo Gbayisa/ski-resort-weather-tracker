@@ -6,10 +6,15 @@ const router = Router();
 
 /** Attaches req.rider from "Authorization: Bearer <token>". */
 function auth(required = true) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const header = req.get('authorization') || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-    req.rider = community.riderFromToken(token);
+    try {
+      req.rider = await community.riderFromToken(token);
+    } catch (err) {
+      console.error('Auth lookup failed:', err);
+      return res.status(503).json({ error: 'unavailable', message: 'Please try again in a moment' });
+    }
     if (required && !req.rider) return res.status(401).json({ error: 'auth_required', message: 'Create a profile first' });
     next();
   };
@@ -36,9 +41,9 @@ router.get('/me', auth(false), handle((req) => (req.rider ? community.me(req.rid
 router.post(
   '/profile',
   auth(false),
-  handle((req) => {
-    const { rider, token } = community.saveProfile(req.rider, req.body);
-    return { ...community.me(community.riderById(rider.id)), token };
+  handle(async (req) => {
+    const { rider, token } = await community.saveProfile(req.rider, req.body);
+    return { ...(await community.me(await community.riderById(rider.id))), token };
   })
 );
 
@@ -47,38 +52,38 @@ router.delete('/profile', auth(), handle((req) => community.deleteRider(req.ride
 router.post(
   '/checkin',
   auth(),
-  handle((req) => {
+  handle(async (req) => {
     const { lat, lon, intents, note, devResortId } = req.body || {};
-    return { checkin: community.checkIn(req.rider, { lat: Number(lat), lon: Number(lon), intents, note, devResortId }) };
+    return { checkin: await community.checkIn(req.rider, { lat: Number(lat), lon: Number(lon), intents, note, devResortId }) };
   })
 );
-router.patch('/checkin', auth(), handle((req) => ({ checkin: community.updateCheckin(req.rider, req.body || {}) })));
+router.patch('/checkin', auth(), handle(async (req) => ({ checkin: await community.updateCheckin(req.rider, req.body || {}) })));
 router.delete('/checkin', auth(), handle((req) => community.checkOut(req.rider.id)));
 
-router.get('/resorts/:id/riders', auth(), handle((req) => ({ riders: community.ridersAt(req.rider, id(req.params.id)) })));
+router.get('/resorts/:id/riders', auth(), handle(async (req) => ({ riders: await community.ridersAt(req.rider, id(req.params.id)) })));
 
-router.get('/connections', auth(), handle((req) => ({ connections: community.listConnections(req.rider) })));
+router.get('/connections', auth(), handle(async (req) => ({ connections: await community.listConnections(req.rider) })));
 router.post(
   '/connections',
   auth(),
-  handle((req) => ({
-    connection: community.requestConnection(req.rider, { toRiderId: id(req.body?.toRiderId), intent: req.body?.intent }),
+  handle(async (req) => ({
+    connection: await community.requestConnection(req.rider, { toRiderId: id(req.body?.toRiderId), intent: req.body?.intent }),
   }))
 );
 router.post(
   '/connections/:id/respond',
   auth(),
-  handle((req) => ({ connection: community.respondConnection(req.rider, id(req.params.id), !!req.body?.accept) }))
+  handle(async (req) => ({ connection: await community.respondConnection(req.rider, id(req.params.id), !!req.body?.accept) }))
 );
 router.get(
   '/connections/:id/messages',
   auth(),
-  handle((req) => ({ messages: community.listMessages(req.rider, id(req.params.id), id(req.query.after) || 0) }))
+  handle(async (req) => ({ messages: await community.listMessages(req.rider, id(req.params.id), id(req.query.after) || 0) }))
 );
 router.post(
   '/connections/:id/messages',
   auth(),
-  handle((req) => ({ message: community.sendMessage(req.rider, id(req.params.id), req.body?.body) }))
+  handle(async (req) => ({ message: await community.sendMessage(req.rider, id(req.params.id), req.body?.body) }))
 );
 
 router.post('/block', auth(), handle((req) => community.blockRider(req.rider, id(req.body?.riderId))));
@@ -88,8 +93,8 @@ router.post('/report', auth(), handle((req) => community.reportRider(req.rider, 
 if (process.env.NODE_ENV !== 'production') {
   router.get(
     '/dev/resorts',
-    handle(() => ({
-      resorts: community.devCheckinOptions((r) => seasonStatus(r, new Date().toISOString().slice(0, 10)).inSeason),
+    handle(async () => ({
+      resorts: await community.devCheckinOptions((r) => seasonStatus(r, new Date().toISOString().slice(0, 10)).inSeason),
     }))
   );
 }

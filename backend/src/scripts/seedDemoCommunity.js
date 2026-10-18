@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getDb } from '../db/database.js';
+import { allResorts } from '../db/resortCatalog.js';
 import { hashToken, CHECKIN_HOURS, AVATAR_OPTIONS, RIDER_TAGS } from '../services/community.js';
 import { seasonStatus } from '../data/seasons.js';
 
@@ -50,56 +51,61 @@ const demoTags = (i) => [RIDER_TAGS[i % RIDER_TAGS.length], RIDER_TAGS[(i * 5 + 
 const INTENT_SETS = [['ride'], ['ride', 'coffee'], ['coffee'], ['ride', 'apres'], ['apres'], ['ride', 'coffee', 'apres']];
 const NOTES = ['Top of the main gondola at 10', 'Blue jacket, orange helmet', 'Around the summit café', '', 'Heading up at 9:30', ''];
 
-export function seedDemoCommunity() {
+export async function seedDemoCommunity() {
   if (process.env.NODE_ENV === 'production' || process.env.DEMO_COMMUNITY === 'off') return;
   const db = getDb();
   const today = new Date().toISOString().slice(0, 10);
 
   // Demo riders gather where people can actually ski today
-  const openResorts = db
-    .prepare('SELECT * FROM resorts ORDER BY piste_km DESC NULLS LAST')
-    .all()
+  const openResorts = [...(await allResorts())]
+    .sort((a, b) => (b.piste_km ?? -1) - (a.piste_km ?? -1))
     .filter((r) => seasonStatus(r, today).inSeason)
     .slice(0, 3);
   if (openResorts.length === 0) return;
 
-  const insert = db.prepare(
-    `INSERT INTO riders (token_hash, name, age, sport, gender, level, bio, visibility, avatar, is_demo)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'everyone', ?, 1)`
-  );
-  const existing = db.prepare('SELECT id FROM riders WHERE is_demo = 1 ORDER BY id').all();
+  const existing = await db.all('SELECT id FROM riders WHERE is_demo = 1 ORDER BY id');
   const ids = existing.map((r) => r.id);
-  db.transaction(() => {
+  const now = Date.now();
+  await db.tx(async (t) => {
     for (let i = ids.length; i < DEMO_RIDERS.length; i++) {
       const [name, age, sport, gender, level, bio, avatar] = DEMO_RIDERS[i];
       const token = crypto.randomBytes(32).toString('base64url');
-      ids.push(insert.run(hashToken(token), name, age, sport, gender, level, bio, avatar).lastInsertRowid);
+      ids.push(
+        await t.insert(
+          `INSERT INTO riders (token_hash, name, age, sport, gender, level, bio, visibility, avatar, is_demo)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'everyone', ?, 1)`,
+          hashToken(token), name, age, sport, gender, level, bio, avatar
+        )
+      );
     }
 
-    const checkin = db.prepare(
-      `INSERT OR REPLACE INTO checkins (rider_id, resort_id, intents, note, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    );
-    const now = Date.now();
-    const profile = db.prepare('UPDATE riders SET avatar_config = ?, tags = ?, home_resort_id = ?, riders_met = ? WHERE id = ?');
-    const day = db.prepare('INSERT OR IGNORE INTO rider_days (rider_id, resort_id, day) VALUES (?, ?, ?)');
-    ids.forEach((riderId, i) => {
+    for (const [i, riderId] of ids.entries()) {
       const home = openResorts[i % openResorts.length];
       const [, , sport, gender] = DEMO_RIDERS[i];
-      profile.run(JSON.stringify(demoAvatar(i, sport, gender)), JSON.stringify([...new Set(demoTags(i))]), home.id, i % 7, riderId);
+      await t.run(
+        'UPDATE riders SET avatar_config = ?, tags = ?, home_resort_id = ?, riders_met = ? WHERE id = ?',
+        JSON.stringify(demoAvatar(i, sport, gender)), JSON.stringify([...new Set(demoTags(i))]), home.id, i % 7, riderId
+      );
       // A little season history (dev only) so stats and badges have something to show
       for (let d = 0; d < (i % 6) + 1; d++) {
         const date = new Date(now - (d * 9 + i) * 24 * 3600 * 1000).toISOString().slice(0, 10);
-        day.run(riderId, openResorts[(i + d) % openResorts.length].id, date);
+        await t.run(
+          'INSERT INTO rider_days (rider_id, resort_id, day) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
+          riderId, openResorts[(i + d) % openResorts.length].id, date
+        );
       }
-    });
-    ids.forEach((riderId, i) => {
       // Consecutive riders (a woman/man pair in DEMO_RIDERS) share a resort, cycling the biggest open ones
       const resort = openResorts[Math.floor(i / 2) % openResorts.length];
       const createdAt = new Date(now - (i * 7 + 3) * 60 * 1000).toISOString();
       const expiresAt = new Date(now + CHECKIN_HOURS * 3600 * 1000).toISOString();
-      checkin.run(riderId, resort.id, JSON.stringify(INTENT_SETS[i % INTENT_SETS.length]), NOTES[i % NOTES.length], createdAt, expiresAt);
-    });
-  })();
+      await t.run(
+        `INSERT INTO checkins (rider_id, resort_id, intents, note, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (rider_id) DO UPDATE SET resort_id = excluded.resort_id, intents = excluded.intents,
+           note = excluded.note, created_at = excluded.created_at, expires_at = excluded.expires_at`,
+        riderId, resort.id, JSON.stringify(INTENT_SETS[i % INTENT_SETS.length]), NOTES[i % NOTES.length], createdAt, expiresAt
+      );
+    }
+  });
   console.log(`[Demo] ${ids.length} demo riders checked in at ${openResorts.map((r) => r.name).join(', ')}`);
 }

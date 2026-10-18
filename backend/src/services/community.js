@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getDb } from '../db/database.js';
+import { allResorts } from '../db/resortCatalog.js';
 import { haversineDistance } from './forecastUtils.js';
 import { seasonFor } from '../data/seasons.js';
 
@@ -98,9 +99,9 @@ export class CommunityError extends Error {
 export const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const newToken = () => crypto.randomBytes(32).toString('base64url');
 
-export function riderFromToken(token) {
+export async function riderFromToken(token) {
   if (!token) return null;
-  return getDb().prepare('SELECT * FROM riders WHERE token_hash = ?').get(hashToken(token)) || null;
+  return (await getDb().get('SELECT * FROM riders WHERE token_hash = ?', hashToken(token))) || null;
 }
 
 // ---------- validation ----------
@@ -182,11 +183,24 @@ export function validateProfile(input = {}) {
 
 // ---------- profile ----------
 
-/** What other riders see. Instagram stays hidden until connected, unless the rider shares it with everyone. */
-export function publicProfile(r, { connected = false } = {}) {
-  const home = r.home_resort_id
-    ? getDb().prepare('SELECT id, name FROM resorts WHERE id = ?').get(r.home_resort_id) || null
-    : null;
+async function resortsById() {
+  return new Map((await allResorts()).map((r) => [r.id, r]));
+}
+
+/** Distinct days on snow this season, for many riders in one query. */
+async function seasonDaysFor(riderIds) {
+  if (riderIds.length === 0) return new Map();
+  const rows = await getDb().all(
+    `SELECT rider_id, COUNT(DISTINCT day) AS days FROM rider_days
+     WHERE rider_id = ANY(?::int[]) AND day >= ? GROUP BY rider_id`,
+    riderIds,
+    seasonStart()
+  );
+  return new Map(rows.map((r) => [r.rider_id, r.days]));
+}
+
+function profileFrom(r, { connected, resorts, seasonDays }) {
+  const home = r.home_resort_id ? resorts.get(r.home_resort_id) : null;
   return {
     id: r.id,
     name: r.name,
@@ -198,11 +212,17 @@ export function publicProfile(r, { connected = false } = {}) {
     avatar: r.avatar,
     avatarConfig: r.avatar_config ? JSON.parse(r.avatar_config) : null,
     tags: JSON.parse(r.tags || '[]'),
-    home,
+    home: home ? { id: home.id, name: home.name } : null,
     instagram: connected || r.instagram_visibility === 'everyone' ? r.instagram : null,
-    seasonDays: seasonStats(r).days,
+    seasonDays: seasonDays.get(r.id) || 0,
     isDemo: !!r.is_demo,
   };
+}
+
+/** What other riders see. Instagram stays hidden until connected, unless the rider shares it with everyone. */
+export async function publicProfile(r, { connected = false } = {}) {
+  const [resorts, seasonDays] = await Promise.all([resortsById(), seasonDaysFor([r.id])]);
+  return profileFrom(r, { connected, resorts, seasonDays });
 }
 
 // ---------- season stats & badges ----------
@@ -213,15 +233,15 @@ export function seasonStart(today = new Date().toISOString().slice(0, 10)) {
   return today.slice(5) >= '08-01' ? `${year}-08-01` : `${year - 1}-08-01`;
 }
 
-export function seasonStats(rider) {
-  const db = getDb();
-  const since = seasonStart();
-  const days = db.prepare('SELECT DISTINCT day, resort_id FROM rider_days WHERE rider_id = ? AND day >= ?').all(rider.id, since);
+export async function seasonStats(rider) {
+  const days = await getDb().all(
+    'SELECT DISTINCT day, resort_id FROM rider_days WHERE rider_id = ? AND day >= ?',
+    rider.id,
+    seasonStart()
+  );
+  const resorts = await resortsById();
   const resortIds = [...new Set(days.map((d) => d.resort_id))];
-  const resorts = resortIds.length
-    ? db.prepare(`SELECT id, osm_id, name, country, lat FROM resorts WHERE id IN (${resortIds.map(() => '?').join(',')})`).all(...resortIds)
-    : [];
-  const glacierIds = new Set(resorts.filter((r) => seasonFor(r).glacier).map((r) => r.id));
+  const glacierIds = new Set(resortIds.filter((id) => resorts.has(id) && seasonFor(resorts.get(id)).glacier));
   return {
     days: new Set(days.map((d) => d.day)).size,
     resorts: resortIds.length,
@@ -248,69 +268,64 @@ export function badgesFor(stats) {
   }));
 }
 
-const privateProfile = (r) => ({
-  ...publicProfile(r, { connected: true }),
+const privateProfile = async (r) => ({
+  ...(await publicProfile(r, { connected: true })),
   gender: r.gender,
   visibility: r.visibility,
   instagramVisibility: r.instagram_visibility,
 });
 
 /** Create (no current rider) or update a profile. Returns { rider, token? }. */
-export function saveProfile(current, input) {
+export async function saveProfile(current, input) {
   const p = validateProfile(input);
   const db = getDb();
-  if (p.homeResortId != null && !db.prepare('SELECT 1 FROM resorts WHERE id = ?').get(p.homeResortId)) {
+  if (p.homeResortId != null && !(await resortsById()).has(p.homeResortId)) {
     throw new CommunityError(400, 'invalid_profile', 'Home mountain not found');
   }
   const avatarConfig = JSON.stringify(p.avatar ?? (current?.avatar_config ? JSON.parse(current.avatar_config) : randomAvatar(p.sport)));
   const tags = JSON.stringify(p.tags);
   if (current) {
-    db.prepare(
+    await db.run(
       `UPDATE riders SET name=?, age=?, sport=?, gender=?, level=?, bio=?, visibility=?, avatar_config=?, tags=?,
-       home_resort_id=?, instagram=?, instagram_visibility=?, updated_at=datetime('now') WHERE id=?`
-    ).run(
+       home_resort_id=?, instagram=?, instagram_visibility=?, updated_at=? WHERE id=?`,
       p.name, p.age, p.sport, p.gender, p.level, p.bio, p.visibility, avatarConfig, tags, p.homeResortId,
-      p.instagram, p.instagramVisibility, current.id
+      p.instagram, p.instagramVisibility, nowIso(), current.id
     );
-    return { rider: privateProfile(db.prepare('SELECT * FROM riders WHERE id=?').get(current.id)) };
+    return { rider: await privateProfile(await riderById(current.id)) };
   }
   const token = newToken();
   const avatar = AVATARS[crypto.randomInt(AVATARS.length)];
-  const { lastInsertRowid } = db
-    .prepare(
-      `INSERT INTO riders (token_hash, name, age, sport, gender, level, bio, visibility, avatar, avatar_config, tags,
-       home_resort_id, instagram, instagram_visibility)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      hashToken(token), p.name, p.age, p.sport, p.gender, p.level, p.bio, p.visibility, avatar, avatarConfig, tags,
-      p.homeResortId, p.instagram, p.instagramVisibility
-    );
-  return { rider: privateProfile(db.prepare('SELECT * FROM riders WHERE id=?').get(lastInsertRowid)), token };
+  const id = await db.insert(
+    `INSERT INTO riders (token_hash, name, age, sport, gender, level, bio, visibility, avatar, avatar_config, tags,
+     home_resort_id, instagram, instagram_visibility)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    hashToken(token), p.name, p.age, p.sport, p.gender, p.level, p.bio, p.visibility, avatar, avatarConfig, tags,
+    p.homeResortId, p.instagram, p.instagramVisibility
+  );
+  return { rider: await privateProfile(await riderById(id)), token };
 }
 
-export const riderById = (id) => getDb().prepare('SELECT * FROM riders WHERE id = ?').get(id);
+export const riderById = (id) => getDb().get('SELECT * FROM riders WHERE id = ?', id);
 
-export function deleteRider(riderId) {
-  const db = getDb();
-  db.transaction(() => {
-    db.prepare('UPDATE reports SET reporter = NULL WHERE reporter = ?').run(riderId);
-    db.prepare('DELETE FROM riders WHERE id = ?').run(riderId);
-  })();
+export async function deleteRider(riderId) {
+  await getDb().tx(async (t) => {
+    await t.run('UPDATE reports SET reporter = NULL WHERE reporter = ?', riderId);
+    await t.run('DELETE FROM riders WHERE id = ?', riderId);
+  });
 }
 
-export function me(rider) {
-  const stats = seasonStats(rider);
-  return { rider: privateProfile(rider), checkin: currentCheckin(rider.id), season: stats, badges: badgesFor(stats) };
+export async function me(rider) {
+  const [stats, profile, checkin] = await Promise.all([seasonStats(rider), privateProfile(rider), currentCheckin(rider.id)]);
+  return { rider: profile, checkin, season: stats, badges: badgesFor(stats) };
 }
 
 // ---------- check-ins ----------
 
-export function nearestResort(lat, lon) {
+export async function nearestResort(lat, lon) {
   let best = null;
-  for (const r of getDb().prepare('SELECT id, name, region, country, lat, lon FROM resorts').all()) {
+  for (const r of await allResorts()) {
     const d = haversineDistance(lat, lon, r.lat, r.lon);
-    if (!best || d < best.distanceKm) best = { resort: r, distanceKm: d };
+    if (!best || d < best.distanceKm) best = { resort: { id: r.id, name: r.name, region: r.region, country: r.country }, distanceKm: d };
   }
   return best;
 }
@@ -320,14 +335,14 @@ const cleanIntents = (intents) => {
   return list.length ? [...new Set(list)] : ['ride'];
 };
 
-export function currentCheckin(riderId) {
-  const row = getDb()
-    .prepare(
-      `SELECT c.*, r.name AS resort_name, r.region, r.country FROM checkins c
-       JOIN resorts r ON r.id = c.resort_id
-       WHERE c.rider_id = ? AND c.expires_at > ?`
-    )
-    .get(riderId, nowIso());
+export async function currentCheckin(riderId) {
+  const row = await getDb().get(
+    `SELECT c.*, r.name AS resort_name, r.region, r.country FROM checkins c
+     JOIN resorts r ON r.id = c.resort_id
+     WHERE c.rider_id = ? AND c.expires_at > ?`,
+    riderId,
+    nowIso()
+  );
   if (!row) return null;
   return {
     resort: { id: row.resort_id, name: row.resort_name, region: row.region, country: row.country },
@@ -341,17 +356,17 @@ export function currentCheckin(riderId) {
  * Check in at the resort the rider is physically at. lat/lon are only used to
  * find the resort and are discarded. In development, devResortId simulates it.
  */
-export function checkIn(rider, { lat, lon, intents, note, devResortId } = {}) {
+export async function checkIn(rider, { lat, lon, intents, note, devResortId } = {}) {
   const db = getDb();
   let resort;
   if (devResortId != null && isDev()) {
-    resort = db.prepare('SELECT id, name FROM resorts WHERE id = ?').get(devResortId);
+    resort = (await resortsById()).get(Number(devResortId));
     if (!resort) throw new CommunityError(404, 'resort_not_found', 'Resort not found');
   } else {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       throw new CommunityError(400, 'location_required', 'Location is needed to confirm your resort');
     }
-    const nearest = nearestResort(lat, lon);
+    const nearest = await nearestResort(lat, lon);
     if (!nearest || nearest.distanceKm > CHECKIN_RADIUS_KM) {
       throw new CommunityError(422, 'not_at_resort', "You don't seem to be at a ski resort right now", {
         nearest: nearest && { name: nearest.resort.name, distanceKm: Math.round(nearest.distanceKm) },
@@ -361,50 +376,71 @@ export function checkIn(rider, { lat, lon, intents, note, devResortId } = {}) {
   }
 
   const expiresAt = new Date(Date.now() + CHECKIN_HOURS * 3600 * 1000).toISOString();
-  db.prepare(
-    `INSERT OR REPLACE INTO checkins (rider_id, resort_id, intents, note, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(rider.id, resort.id, JSON.stringify(cleanIntents(intents)), cleanText(note, LIMITS.note), nowIso(), expiresAt);
-  db.prepare('INSERT OR IGNORE INTO rider_days (rider_id, resort_id, day) VALUES (?, ?, ?)').run(
-    rider.id,
-    resort.id,
-    nowIso().slice(0, 10)
+  await db.tx(async (t) => {
+    await t.run(
+      `INSERT INTO checkins (rider_id, resort_id, intents, note, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (rider_id) DO UPDATE SET resort_id = excluded.resort_id, intents = excluded.intents,
+         note = excluded.note, created_at = excluded.created_at, expires_at = excluded.expires_at`,
+      rider.id, resort.id, JSON.stringify(cleanIntents(intents)), cleanText(note, LIMITS.note), nowIso(), expiresAt
+    );
+    await t.run(
+      'INSERT INTO rider_days (rider_id, resort_id, day) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
+      rider.id,
+      resort.id,
+      nowIso().slice(0, 10)
+    );
+  });
+  return currentCheckin(rider.id);
+}
+
+export async function updateCheckin(rider, { intents, note }) {
+  if (!(await currentCheckin(rider.id))) throw new CommunityError(409, 'not_checked_in', 'Check in first');
+  await getDb().run(
+    'UPDATE checkins SET intents = ?, note = ? WHERE rider_id = ?',
+    JSON.stringify(cleanIntents(intents)),
+    cleanText(note, LIMITS.note),
+    rider.id
   );
   return currentCheckin(rider.id);
 }
 
-export function updateCheckin(rider, { intents, note }) {
-  if (!currentCheckin(rider.id)) throw new CommunityError(409, 'not_checked_in', 'Check in first');
-  getDb()
-    .prepare('UPDATE checkins SET intents = ?, note = ? WHERE rider_id = ?')
-    .run(JSON.stringify(cleanIntents(intents)), cleanText(note, LIMITS.note), rider.id);
-  return currentCheckin(rider.id);
-}
-
-export function checkOut(riderId) {
-  getDb().prepare('DELETE FROM checkins WHERE rider_id = ?').run(riderId);
+export async function checkOut(riderId) {
+  await getDb().run('DELETE FROM checkins WHERE rider_id = ?', riderId);
 }
 
 /** Riders checked in per resort right now — aggregate counts only, safe to show publicly. */
-export function activeCheckinCounts() {
-  const rows = getDb()
-    .prepare('SELECT resort_id, COUNT(*) AS n FROM checkins WHERE expires_at > ? GROUP BY resort_id')
-    .all(nowIso());
+export async function activeCheckinCounts() {
+  const rows = await getDb().all(
+    'SELECT resort_id, COUNT(*) AS n FROM checkins WHERE expires_at > ? GROUP BY resort_id',
+    nowIso()
+  );
   return new Map(rows.map((r) => [r.resort_id, r.n]));
 }
 
 // ---------- discovery of riders ----------
 
-function blockedEitherWay(a, b) {
-  return !!getDb()
-    .prepare('SELECT 1 FROM blocks WHERE (blocker=? AND blocked=?) OR (blocker=? AND blocked=?)')
-    .get(a, b, b, a);
+/** Riders who blocked, or were blocked by, `riderId`. */
+async function blockedWith(riderId) {
+  const rows = await getDb().all(
+    'SELECT blocked AS id FROM blocks WHERE blocker = ? UNION SELECT blocker AS id FROM blocks WHERE blocked = ?',
+    riderId,
+    riderId
+  );
+  return new Set(rows.map((r) => r.id));
+}
+
+async function blockedEitherWay(a, b) {
+  return !!(await getDb().get(
+    'SELECT 1 FROM blocks WHERE (blocker=? AND blocked=?) OR (blocker=? AND blocked=?)',
+    a, b, b, a
+  ));
 }
 
 const visibleTo = (viewer, target) => target.visibility === 'everyone' || viewer.gender === 'woman';
 
-function requireCheckedInAt(viewer, resortId) {
-  const c = currentCheckin(viewer.id);
+async function requireCheckedInAt(viewer, resortId) {
+  const c = await currentCheckin(viewer.id);
   if (!c || c.resort.id !== Number(resortId)) {
     throw new CommunityError(403, 'not_checked_in', "Check in at this resort to see who's riding here");
   }
@@ -414,33 +450,51 @@ function requireCheckedInAt(viewer, resortId) {
 const todayCutoff = () => new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 
 function connectionBetween(a, b, resortId) {
-  return getDb()
-    .prepare(
-      `SELECT * FROM connections
-       WHERE ((from_rider=? AND to_rider=?) OR (from_rider=? AND to_rider=?))
-         AND resort_id=? AND created_at > ? AND status != 'declined'
-       ORDER BY id DESC LIMIT 1`
-    )
-    .get(a, b, b, a, resortId, todayCutoff());
+  return getDb().get(
+    `SELECT * FROM connections
+     WHERE ((from_rider=? AND to_rider=?) OR (from_rider=? AND to_rider=?))
+       AND resort_id=? AND created_at > ? AND status != 'declined'
+     ORDER BY id DESC LIMIT 1`,
+    a, b, b, a, resortId, todayCutoff()
+  );
 }
 
-export function ridersAt(viewer, resortId) {
-  requireCheckedInAt(viewer, resortId);
-  const rows = getDb()
-    .prepare(
-      `SELECT r.*, c.intents, c.note, c.created_at AS checked_in_at FROM checkins c
-       JOIN riders r ON r.id = c.rider_id
-       WHERE c.resort_id = ? AND c.expires_at > ? AND r.id != ?
-       ORDER BY r.is_demo ASC, c.created_at DESC`
-    )
-    .all(resortId, nowIso(), viewer.id);
+export async function ridersAt(viewer, resortId) {
+  await requireCheckedInAt(viewer, resortId);
+  const db = getDb();
+  const rows = await db.all(
+    `SELECT r.*, c.intents, c.note, c.created_at AS checked_in_at FROM checkins c
+     JOIN riders r ON r.id = c.rider_id
+     WHERE c.resort_id = ? AND c.expires_at > ? AND r.id != ?
+     ORDER BY r.is_demo ASC, c.created_at DESC`,
+    Number(resortId),
+    nowIso(),
+    viewer.id
+  );
+  // Everything per-rider comes from a handful of set queries rather than several per rider
+  const [blocked, conns, resorts, seasonDays] = await Promise.all([
+    blockedWith(viewer.id),
+    db.all(
+      `SELECT * FROM connections
+       WHERE (from_rider = ? OR to_rider = ?) AND resort_id = ? AND created_at > ? AND status != 'declined'
+       ORDER BY id DESC`,
+      viewer.id, viewer.id, Number(resortId), todayCutoff()
+    ),
+    resortsById(),
+    seasonDaysFor(rows.map((r) => r.id)),
+  ]);
+  const latestWith = new Map();
+  for (const c of conns) {
+    const other = c.from_rider === viewer.id ? c.to_rider : c.from_rider;
+    if (!latestWith.has(other)) latestWith.set(other, c);
+  }
 
   return rows
-    .filter((r) => visibleTo(viewer, r) && !blockedEitherWay(viewer.id, r.id))
+    .filter((r) => visibleTo(viewer, r) && !blocked.has(r.id))
     .map((r) => {
-      const conn = connectionBetween(viewer.id, r.id, Number(resortId));
+      const conn = latestWith.get(r.id);
       return {
-        ...publicProfile(r, { connected: conn?.status === 'accepted' }),
+        ...profileFrom(r, { connected: conn?.status === 'accepted', resorts, seasonDays }),
         intents: JSON.parse(r.intents),
         note: r.note,
         checkedInAt: r.checked_in_at,
@@ -459,159 +513,166 @@ const DEMO_REPLIES = {
   apres: "Après it is 🍻 We'll be at the bar by the gondola base from 4.",
 };
 
-export function requestConnection(viewer, { toRiderId, intent }) {
+export async function requestConnection(viewer, { toRiderId, intent }) {
   const db = getDb();
-  const mine = currentCheckin(viewer.id);
+  const mine = await currentCheckin(viewer.id);
   if (!mine) throw new CommunityError(409, 'not_checked_in', 'Check in first');
-  const target = db.prepare('SELECT * FROM riders WHERE id = ?').get(toRiderId);
-  const theirs = target && currentCheckin(target.id);
+  const target = Number.isInteger(toRiderId) ? await riderById(toRiderId) : null;
+  const theirs = target && (await currentCheckin(target.id));
   if (!target || !theirs || theirs.resort.id !== mine.resort.id || !visibleTo(viewer, target)) {
     throw new CommunityError(404, 'rider_unavailable', "This rider isn't on the mountain anymore");
   }
-  if (target.id === viewer.id || blockedEitherWay(viewer.id, target.id)) {
+  if (target.id === viewer.id || (await blockedEitherWay(viewer.id, target.id))) {
     throw new CommunityError(403, 'not_allowed', "You can't connect with this rider");
   }
   oneOf(intent, INTENTS, 'intent');
 
-  const existing = connectionBetween(viewer.id, target.id, mine.resort.id);
+  const existing = await connectionBetween(viewer.id, target.id, mine.resort.id);
   if (existing) return connectionView(viewer, existing);
 
-  const sentToday = db
-    .prepare('SELECT COUNT(*) AS n FROM connections WHERE from_rider = ? AND created_at > ?')
-    .get(viewer.id, todayCutoff()).n;
+  const { n: sentToday } = await db.get(
+    'SELECT COUNT(*) AS n FROM connections WHERE from_rider = ? AND created_at > ?',
+    viewer.id,
+    todayCutoff()
+  );
   if (sentToday >= MAX_REQUESTS_PER_DAY) {
     throw new CommunityError(429, 'too_many_requests', 'Daily request limit reached — try again tomorrow');
   }
 
   const ts = nowIso();
-  const { lastInsertRowid } = db
-    .prepare(
-      `INSERT INTO connections (from_rider, to_rider, resort_id, intent, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'pending', ?, ?)`
-    )
-    .run(viewer.id, target.id, mine.resort.id, intent, ts, ts);
+  const id = await db.insert(
+    `INSERT INTO connections (from_rider, to_rider, resort_id, intent, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+    viewer.id, target.id, mine.resort.id, intent, ts, ts
+  );
 
   // Development only: demo riders accept and reply so the flow can be tried end to end
   if (target.is_demo && isDev()) {
-    db.prepare("UPDATE connections SET status = 'accepted', updated_at = ? WHERE id = ?").run(ts, lastInsertRowid);
-    db.prepare('UPDATE riders SET riders_met = riders_met + 1 WHERE id IN (?, ?)').run(viewer.id, target.id);
-    db.prepare('INSERT INTO messages (connection_id, from_rider, body, created_at) VALUES (?, ?, ?, ?)').run(
-      lastInsertRowid,
-      target.id,
-      DEMO_REPLIES[intent],
-      ts
-    );
+    await db.tx(async (t) => {
+      await t.run("UPDATE connections SET status = 'accepted', updated_at = ? WHERE id = ?", ts, id);
+      await t.run('UPDATE riders SET riders_met = riders_met + 1 WHERE id IN (?, ?)', viewer.id, target.id);
+      await t.run(
+        'INSERT INTO messages (connection_id, from_rider, body, created_at) VALUES (?, ?, ?, ?)',
+        id, target.id, DEMO_REPLIES[intent], ts
+      );
+    });
   }
-  return connectionView(viewer, db.prepare('SELECT * FROM connections WHERE id = ?').get(lastInsertRowid));
+  return connectionView(viewer, await db.get('SELECT * FROM connections WHERE id = ?', id));
 }
 
-function connectionView(viewer, c) {
+async function connectionView(viewer, c) {
   const db = getDb();
   const otherId = c.from_rider === viewer.id ? c.to_rider : c.from_rider;
-  const other = db.prepare('SELECT * FROM riders WHERE id = ?').get(otherId);
-  const last = db
-    .prepare('SELECT body, from_rider, created_at FROM messages WHERE connection_id = ? ORDER BY id DESC LIMIT 1')
-    .get(c.id);
+  const [other, last] = await Promise.all([
+    riderById(otherId),
+    db.get('SELECT body, from_rider, created_at FROM messages WHERE connection_id = ? ORDER BY id DESC LIMIT 1', c.id),
+  ]);
   return {
     id: c.id,
     status: c.status,
     intent: c.intent,
     direction: c.from_rider === viewer.id ? 'outgoing' : 'incoming',
     createdAt: c.created_at,
-    rider: other ? publicProfile(other, { connected: c.status === 'accepted' }) : null,
+    rider: other ? await publicProfile(other, { connected: c.status === 'accepted' }) : null,
     lastMessage: last ? { body: last.body, mine: last.from_rider === viewer.id, at: last.created_at } : null,
   };
 }
 
-export function listConnections(viewer) {
-  return getDb()
-    .prepare(
+export async function listConnections(viewer) {
+  const [rows, blocked] = await Promise.all([
+    getDb().all(
       `SELECT * FROM connections WHERE (from_rider = ? OR to_rider = ?) AND created_at > ?
-       AND status != 'declined' ORDER BY updated_at DESC`
-    )
-    .all(viewer.id, viewer.id, todayCutoff())
-    .filter((c) => !blockedEitherWay(c.from_rider, c.to_rider))
-    .map((c) => connectionView(viewer, c));
+       AND status != 'declined' ORDER BY updated_at DESC`,
+      viewer.id, viewer.id, todayCutoff()
+    ),
+    blockedWith(viewer.id),
+  ]);
+  const visible = rows.filter((c) => !blocked.has(c.from_rider === viewer.id ? c.to_rider : c.from_rider));
+  return Promise.all(visible.map((c) => connectionView(viewer, c)));
 }
 
-function connectionFor(viewer, id) {
-  const c = getDb().prepare('SELECT * FROM connections WHERE id = ?').get(id);
+async function connectionFor(viewer, id) {
+  const c = Number.isInteger(Number(id)) ? await getDb().get('SELECT * FROM connections WHERE id = ?', Number(id)) : null;
   if (!c || (c.from_rider !== viewer.id && c.to_rider !== viewer.id)) {
     throw new CommunityError(404, 'not_found', 'Conversation not found');
   }
-  if (blockedEitherWay(c.from_rider, c.to_rider)) throw new CommunityError(403, 'not_allowed', 'Not available');
+  if (await blockedEitherWay(c.from_rider, c.to_rider)) throw new CommunityError(403, 'not_allowed', 'Not available');
   return c;
 }
 
-export function respondConnection(viewer, id, accept) {
-  const c = connectionFor(viewer, id);
+export async function respondConnection(viewer, id, accept) {
+  const c = await connectionFor(viewer, id);
   if (c.to_rider !== viewer.id || c.status !== 'pending') {
     throw new CommunityError(409, 'not_pending', 'This request was already answered');
   }
-  getDb()
-    .prepare('UPDATE connections SET status = ?, updated_at = ? WHERE id = ?')
-    .run(accept ? 'accepted' : 'declined', nowIso(), id);
-  if (accept) {
-    getDb().prepare('UPDATE riders SET riders_met = riders_met + 1 WHERE id IN (?, ?)').run(c.from_rider, c.to_rider);
-  }
-  return connectionView(viewer, getDb().prepare('SELECT * FROM connections WHERE id = ?').get(id));
+  const db = getDb();
+  await db.tx(async (t) => {
+    await t.run('UPDATE connections SET status = ?, updated_at = ? WHERE id = ?', accept ? 'accepted' : 'declined', nowIso(), c.id);
+    if (accept) await t.run('UPDATE riders SET riders_met = riders_met + 1 WHERE id IN (?, ?)', c.from_rider, c.to_rider);
+  });
+  return connectionView(viewer, await db.get('SELECT * FROM connections WHERE id = ?', c.id));
 }
 
 function requireAccepted(c) {
   if (c.status !== 'accepted') throw new CommunityError(409, 'not_accepted', 'Chat opens once the request is accepted');
 }
 
-export function listMessages(viewer, id, afterId = 0) {
-  const c = connectionFor(viewer, id);
+export async function listMessages(viewer, id, afterId = 0) {
+  const c = await connectionFor(viewer, id);
   requireAccepted(c);
-  return getDb()
-    .prepare('SELECT id, from_rider, body, created_at FROM messages WHERE connection_id = ? AND id > ? ORDER BY id')
-    .all(id, afterId)
-    .map((m) => ({ id: m.id, body: m.body, mine: m.from_rider === viewer.id, at: m.created_at }));
+  const rows = await getDb().all(
+    'SELECT id, from_rider, body, created_at FROM messages WHERE connection_id = ? AND id > ? ORDER BY id',
+    c.id,
+    Number(afterId) || 0
+  );
+  return rows.map((m) => ({ id: m.id, body: m.body, mine: m.from_rider === viewer.id, at: m.created_at }));
 }
 
-export function sendMessage(viewer, id, body) {
-  const c = connectionFor(viewer, id);
+export async function sendMessage(viewer, id, body) {
+  const c = await connectionFor(viewer, id);
   requireAccepted(c);
   const text = cleanText(body, LIMITS.message);
   if (!text) throw new CommunityError(400, 'empty_message', 'Message is empty');
   const ts = nowIso();
-  const { lastInsertRowid } = getDb()
-    .prepare('INSERT INTO messages (connection_id, from_rider, body, created_at) VALUES (?, ?, ?, ?)')
-    .run(id, viewer.id, text, ts);
-  getDb().prepare('UPDATE connections SET updated_at = ? WHERE id = ?').run(ts, id);
-  return { id: lastInsertRowid, body: text, mine: true, at: ts };
+  const messageId = await getDb().tx(async (t) => {
+    const newId = await t.insert(
+      'INSERT INTO messages (connection_id, from_rider, body, created_at) VALUES (?, ?, ?, ?)',
+      c.id, viewer.id, text, ts
+    );
+    await t.run('UPDATE connections SET updated_at = ? WHERE id = ?', ts, c.id);
+    return newId;
+  });
+  return { id: messageId, body: text, mine: true, at: ts };
 }
 
 // ---------- safety ----------
 
-export function blockRider(viewer, otherId) {
-  const db = getDb();
-  if (!db.prepare('SELECT 1 FROM riders WHERE id = ?').get(otherId) || otherId === viewer.id) {
+export async function blockRider(viewer, otherId) {
+  const target = Number.isInteger(otherId) ? await riderById(otherId) : null;
+  if (!target || otherId === viewer.id) {
     throw new CommunityError(404, 'not_found', 'Rider not found');
   }
-  db.transaction(() => {
-    db.prepare('INSERT OR IGNORE INTO blocks (blocker, blocked) VALUES (?, ?)').run(viewer.id, otherId);
-    db.prepare(
+  await getDb().tx(async (t) => {
+    await t.run('INSERT INTO blocks (blocker, blocked) VALUES (?, ?) ON CONFLICT DO NOTHING', viewer.id, otherId);
+    await t.run(
       `UPDATE connections SET status = 'declined', updated_at = ?
-       WHERE (from_rider=? AND to_rider=?) OR (from_rider=? AND to_rider=?)`
-    ).run(nowIso(), viewer.id, otherId, otherId, viewer.id);
-  })();
+       WHERE (from_rider=? AND to_rider=?) OR (from_rider=? AND to_rider=?)`,
+      nowIso(), viewer.id, otherId, otherId, viewer.id
+    );
+  });
 }
 
 /** Reporting also blocks, so the reporter never sees that rider again. */
-export function reportRider(viewer, otherId, reason) {
+export async function reportRider(viewer, otherId, reason) {
   const text = cleanText(reason, 300) || 'No reason given';
-  blockRider(viewer, otherId);
-  getDb().prepare('INSERT INTO reports (reporter, reported, reason) VALUES (?, ?, ?)').run(viewer.id, otherId, text);
+  await blockRider(viewer, otherId);
+  await getDb().run('INSERT INTO reports (reporter, reported, reason) VALUES (?, ?, ?)', viewer.id, otherId, text);
 }
 
 /** Development helper: resorts to simulate a check-in at (in-season ones first). */
-export function devCheckinOptions(isInSeason) {
-  const counts = activeCheckinCounts();
-  return getDb()
-    .prepare('SELECT id, name, country, osm_id, lat FROM resorts ORDER BY name')
-    .all()
+export async function devCheckinOptions(isInSeason) {
+  const [counts, resorts] = await Promise.all([activeCheckinCounts(), allResorts()]);
+  return resorts
     .map((r) => ({ id: r.id, name: r.name, country: r.country, inSeason: isInSeason(r), riders: counts.get(r.id) || 0 }))
     .sort((a, b) => b.inSeason - a.inSeason || b.riders - a.riders || a.name.localeCompare(b.name));
 }

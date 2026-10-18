@@ -1,4 +1,4 @@
-import { getDb } from '../db/database.js';
+import { getDb, NOW_SQL } from '../db/database.js';
 import { haversineDistance } from './forecastUtils.js';
 
 /**
@@ -51,12 +51,13 @@ export async function getDriveInfoBatch(originLat, originLon, resorts) {
   const key = originKey(originLat, originLon);
   const result = new Map();
 
-  const cachedRows = db
-    .prepare(
-      `SELECT resort_id, distance_km, duration_min, source FROM route_cache
-       WHERE origin_key = ? AND expires_at > datetime('now')`
-    )
-    .all(key);
+  const cachedRows = await db.all(
+    `SELECT resort_id, distance_km, duration_min, source FROM route_cache
+     WHERE origin_key = ? AND expires_at > ? AND resort_id = ANY(?::int[])`,
+    key,
+    new Date().toISOString(),
+    resorts.map((r) => r.id)
+  );
   const cached = new Map(cachedRows.map((r) => [r.resort_id, r]));
 
   const missing = [];
@@ -77,18 +78,28 @@ export async function getDriveInfoBatch(originLat, originLon, resorts) {
   if (missing.length > 0) {
     const routed = await fetchOsrmTable(originLat, originLon, missing);
     const expiresAt = new Date(Date.now() + ROUTE_CACHE_TTL_DAYS * 24 * 3600 * 1000).toISOString();
-    const upsert = db.prepare(
-      `INSERT OR REPLACE INTO route_cache (origin_key, resort_id, distance_km, duration_min, source, fetched_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'), ?)`
-    );
-
     for (const resort of missing) {
       const info =
         routed.get(resort.id) ||
         estimateDrive(haversineDistance(originLat, originLon, resort.lat, resort.lon));
       result.set(resort.id, info);
-      upsert.run(key, resort.id, info.distanceKm, info.durationMin, info.source, expiresAt);
     }
+    // One statement for the whole batch: a round trip per resort adds up against a networked database
+    const infos = missing.map((r) => result.get(r.id));
+    await db.run(
+      `INSERT INTO route_cache (origin_key, resort_id, distance_km, duration_min, source, fetched_at, expires_at)
+       SELECT ?, r.resort_id, r.distance_km, r.duration_min, r.source, ${NOW_SQL}, ?
+       FROM unnest(?::int[], ?::float8[], ?::float8[], ?::text[]) AS r(resort_id, distance_km, duration_min, source)
+       ON CONFLICT (origin_key, resort_id) DO UPDATE SET
+         distance_km = excluded.distance_km, duration_min = excluded.duration_min, source = excluded.source,
+         fetched_at = excluded.fetched_at, expires_at = excluded.expires_at`,
+      key,
+      expiresAt,
+      missing.map((r) => r.id),
+      infos.map((i) => i.distanceKm),
+      infos.map((i) => i.durationMin),
+      infos.map((i) => i.source)
+    );
   }
 
   return result;
@@ -145,8 +156,7 @@ async function fetchOsrmTable(originLat, originLon, resorts) {
 }
 
 /** Remove expired route cache entries (called by the scheduled cleanup job). */
-export function cleanExpiredRouteCache() {
-  const db = getDb();
-  const result = db.prepare("DELETE FROM route_cache WHERE expires_at < datetime('now')").run();
+export async function cleanExpiredRouteCache() {
+  const result = await getDb().run('DELETE FROM route_cache WHERE expires_at < ?', new Date().toISOString());
   return result.changes;
 }
