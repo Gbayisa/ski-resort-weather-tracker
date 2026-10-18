@@ -1,13 +1,13 @@
-import { Snowflake } from 'lucide-react';
+import { CableCar } from 'lucide-react';
 
 export default function Footer() {
   return (
     <footer className="footer">
       <div className="footer-brand">
         <span className="brand-mark brand-mark-sm">
-          <Snowflake size={14} strokeWidth={2.5} />
+          <CableCar size={14} strokeWidth={2.3} />
         </span>
-        <strong>PowderRadar</strong>
+        <strong>First Lift</strong>
         <span className="muted">Know before you go</span>
       </div>
       <p>

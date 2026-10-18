@@ -14,7 +14,7 @@ import { haversineDistance } from './forecastUtils.js';
 // self-hosted or commercial OSRM-compatible server for production traffic.
 const OSRM_BASE = (process.env.OSRM_URL || 'https://router.project-osrm.org').replace(/\/$/, '');
 const OSRM_TABLE_URL = `${OSRM_BASE}/table/v1/driving`;
-const USER_AGENT = 'PowderRadar/1.0 (ski resort weather tracker)';
+const USER_AGENT = 'FirstLift/1.0 (ski resort weather tracker)';
 const OSRM_TIMEOUT_MS = 6000;
 const OSRM_MAX_LOCATIONS = 80; // demo server caps table requests at 100 coords
 const ROUTE_CACHE_TTL_DAYS = 7;

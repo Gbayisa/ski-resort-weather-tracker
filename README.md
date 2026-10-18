@@ -1,6 +1,6 @@
-# ⛷️ PowderRadar
+# 🚡 First Lift
 
-**Your perfect ski day in three taps.** PowderRadar ranks ~3,700 ski areas worldwide — from the big
+**Your perfect ski day in three taps.** First Lift ranks ~3,700 ski areas worldwide — from the big
 names to local hills — by real drive time and live snow conditions, and lets solo skiers and
 snowboarders meet other riders on the mountain.
 

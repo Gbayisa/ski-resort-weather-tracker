@@ -1,7 +1,7 @@
 const OPEN_METEO_FORECAST_FREE = 'https://api.open-meteo.com/v1/forecast';
 const OPEN_METEO_FORECAST_PAID = 'https://customer-api.open-meteo.com/v1/forecast';
 const OPEN_METEO_GEOCODING = 'https://geocoding-api.open-meteo.com/v1/search';
-const USER_AGENT = 'PowderRadar/1.0 (ski resort weather tracker)';
+const USER_AGENT = 'FirstLift/1.0 (ski resort weather tracker)';
 
 const HOURLY_VARIABLES =
   'snowfall,precipitation,temperature_2m,snow_depth,freezing_level_height,wind_speed_10m,visibility,cloud_cover';
