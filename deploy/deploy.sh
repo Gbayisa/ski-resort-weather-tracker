@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 PROJECT=${PROJECT:-first-lift}
 REGION=${REGION:-europe-west1}
-SERVICE=${SERVICE:-first-lift}
+SERVICE=${SERVICE:-snowfolk}
 INSTANCE="$PROJECT:$REGION:first-lift-db"
 VERSION=$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . || echo "-dirty")
 IMAGE="$REGION-docker.pkg.dev/$PROJECT/first-lift/app:$VERSION"

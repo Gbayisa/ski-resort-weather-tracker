@@ -1,4 +1,4 @@
-# First Lift: one container serving the API and the built web app (Cloud Run, or any container host).
+# Snowfolk: one container serving the API and the built web app (Cloud Run, or any container host).
 
 # 1) Build the web app
 FROM node:22-slim AS web

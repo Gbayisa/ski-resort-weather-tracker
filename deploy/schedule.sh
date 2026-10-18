@@ -5,7 +5,7 @@ set -euo pipefail
 
 PROJECT=${PROJECT:-first-lift}
 REGION=${REGION:-europe-west1}
-SERVICE=${SERVICE:-first-lift}
+SERVICE=${SERVICE:-snowfolk}
 URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format='value(status.url)')
 KEY=$(gcloud secrets versions access latest --secret maintenance-key --project "$PROJECT")
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Compass, Users, User, CableCar } from 'lucide-react';
+import { Compass, Users, User, MountainSnow } from 'lucide-react';
 import RiderAvatar from './avatar/RiderAvatar.jsx';
 
 const TABS = [
@@ -33,10 +33,10 @@ export function TopBar({ route, navigate, me, overHero }) {
         }}
       >
         <span className="brand-mark">
-          <CableCar size={18} strokeWidth={2.3} />
+          <MountainSnow size={18} strokeWidth={2.3} />
         </span>
         <span>
-          First <span className="grad-text">Lift</span>
+          Snow<span className="grad-text">folk</span>
         </span>
       </a>
       <nav className="topnav" aria-label="Main">

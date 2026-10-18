@@ -1,13 +1,13 @@
-import { CableCar } from 'lucide-react';
+import { MountainSnow } from 'lucide-react';
 
 export default function Footer() {
   return (
     <footer className="footer">
       <div className="footer-brand">
         <span className="brand-mark brand-mark-sm">
-          <CableCar size={14} strokeWidth={2.3} />
+          <MountainSnow size={14} strokeWidth={2.3} />
         </span>
-        <strong>First Lift</strong>
+        <strong>Snowfolk</strong>
         <span className="muted">Know before you go</span>
       </div>
       <p>

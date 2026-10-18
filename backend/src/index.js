@@ -79,7 +79,7 @@ async function start() {
   await seedDemoCommunity();
   if (!ON_CLOUD_RUN) startScheduledJobs();
   const server = app.listen(PORT, () => {
-    console.log(`First Lift API running on http://localhost:${PORT}`);
+    console.log(`Snowfolk API running on http://localhost:${PORT}`);
   });
 
   // Cloud Run sends SIGTERM before stopping an instance: finish requests, then close the database
