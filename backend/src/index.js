@@ -58,6 +58,9 @@ app.use('/api/discover', discoverRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/resort', resortRoutes);
 
+// Unknown API paths are errors, not the web app's page
+app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
+
 // Serve the pre-built frontend in production (single-service deployment).
 // When VITE_API_BASE_URL is left blank the frontend defaults to the relative
 // "/api" prefix which hits these routes above, so no env var is needed.
